@@ -16,7 +16,7 @@ from tests.conftest import GLYPH_ORDER
 
 
 def page_data(page_path: Path) -> dict:
-    data_json = re.search(r"const DATA = (.*);\n", page_path.read_text())
+    data_json = re.search(r"var DATA = (.*);\n", page_path.read_text())
     assert data_json is not None
     return json.loads(data_json[1])
 
@@ -130,4 +130,46 @@ def test_write_hinting_page_escapes(font_factory, tmp_path):
     page = write_hinting_page(font_path, font_path, tmp_path).read_text()
     assert "<title>Hinting: A&lt;b&gt;&amp;&quot; #1.ttf</title>" in page
     assert 'src: url("hinting-new-A%3Cb%3E%26%22%20%231.ttf")' in page
-    assert 'const TITLE = "A<b>&\\" #1";' in page
+    assert 'var TITLE = "A<b>&\\" #1";' in page
+
+
+# Syntax and methods that old browsers don't support, e.g. Internet Explorer 11,
+# Chrome 49 and Firefox 52, which hinting is still checked in on old versions of
+# Windows. Not a full check, but it catches the usual ones.
+UNSUPPORTED_SCRIPT = {
+    "const": r"\bconst\s",
+    "let": r"\blet\s",
+    "arrow function": r"=>",
+    "template string": r"`",
+    "spread or rest": r"\.\.\.",
+    "class": r"\bclass\s+\w+\s*\{",
+    "async or await": r"\b(async|await)\b",
+    "optional chaining": r"\?\.",
+    "nullish coalescing": r"\?\?",
+    "for of": r"\bfor\s*\([^)]*\bof\b",
+    "replaceChildren()": r"\.replaceChildren\(",
+    "append() or prepend()": r"\.(append|prepend)\(",
+    "includes()": r"\.includes\(",
+    "find() or findIndex()": r"\.find(Index|Last)?\(",
+    "Array.from()": r"\bArray\.from\(",
+    "Object.entries() or values()": r"\bObject\.(entries|values|assign)\(",
+    "String.fromCodePoint()": r"\bfromCodePoint\(",
+    "URLSearchParams": r"\bURLSearchParams\b",
+    "classList": r"\bclassList\b",
+    "fetch()": r"\bfetch\(",
+    "Promise": r"\bPromise\b",
+}
+
+
+def test_page_script_works_in_old_browsers(font_path, tmp_path):
+    page = write_hinting_page(font_path, font_path, tmp_path).read_text()
+    script = re.search(r"<script>(.*)</script>", page, re.DOTALL)
+    assert script is not None
+    # Without comments, the page's data and strings, which can contain anything
+    code = re.sub(r"^var (DATA|TITLE) = .*$", "", script[1], flags=re.MULTILINE)
+    code = re.sub(r"//[^\n]*", "", code)
+    code = re.sub(r'"(\\.|[^"\\])*"' + r"|'(\\.|[^'\\])*'", '""', code)
+    found = [
+        name for name, pattern in UNSUPPORTED_SCRIPT.items() if re.search(pattern, code)
+    ]
+    assert found == []

@@ -4,15 +4,19 @@
 <meta charset="utf-8">
 <title>Hinting: {{title}}</title>
 <style>
+/* The page has to work in old browsers too, as hinting is checked on old versions
+   of Windows (e.g. Internet Explorer 11, Chrome 49 and Firefox 52), so newer CSS
+   only refines a layout that works without it */
 @font-face { font-family: "hinting-old"; src: url("{{before_font}}"); }
 @font-face { font-family: "hinting-new"; src: url("{{after_font}}"); }
 /* The look of diffenator2's pages, so the page fits in with them in a report */
 html { font-family: sans-serif; }
 body { font-family: Helvetica; }
 #nav { position: fixed; right: 20px; z-index: 100; }
-.nav-item { display: block; cursor: pointer; user-select: none; text-align: center;
-  color: white; background-color: black; font-size: 9pt; padding: 5px;
-  margin: 2px; }
+.nav-item { display: block; cursor: pointer; -webkit-user-select: none;
+  -moz-user-select: none; -ms-user-select: none; user-select: none;
+  text-align: center; color: white; background-color: black; font-size: 9pt;
+  padding: 5px; margin: 2px; }
 /* .nav-item's display would show hidden items */
 .nav-item[hidden] { display: none; }
 .nav-item select, .nav-item input { background-color: black; color: white;
@@ -26,24 +30,38 @@ body { font-family: Helvetica; }
 .sample { font-kerning: none; font-feature-settings: "liga" 0, "clig" 0, "calt" 0;
   font-synthesis: none; line-height: 1.2; white-space: pre; }
 .box-text { outline: none; }
-/* Every character the font encodes, wrapped anywhere, as it has no spaces */
-#text-sample { white-space: pre-wrap; overflow-wrap: anywhere;
+/* Every character the font encodes, wrapped anywhere, as it has no spaces.
+   Browsers without `overflow-wrap: anywhere` break words anywhere instead */
+#text-sample { white-space: pre-wrap; word-break: break-all;
   margin-right: 150px; }
+@supports (overflow-wrap: anywhere) {
+  #text-sample { word-break: normal; overflow-wrap: anywhere; }
+}
 .font-old { font-family: "hinting-old"; }
 .font-new { font-family: "hinting-new"; }
 .missing { font-size: 8pt; color: #888; }
 .size-label { display: block; font-size: 7pt; color: #888; }
-#waterfall-samples { display: flex; flex-wrap: wrap; gap: 4px 12px;
-  align-items: baseline; margin-right: 150px; }
-/* --cell-size is set from the size in ppem */
-#glyphs { display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--cell-size, 40px), 1fr));
-  gap: 4px; margin-right: 150px; }
-.glyph { border: 1px dashed grey; padding: 4px; cursor: pointer; overflow: hidden;
+/* Margins rather than `gap`, which old browsers don't support in flex layouts */
+#waterfall-samples { display: -ms-flexbox; display: flex; -ms-flex-wrap: wrap;
+  flex-wrap: wrap; -ms-flex-align: baseline; align-items: baseline;
+  margin-right: 150px; }
+#waterfall-samples > span { margin: 0 12px 4px 0; }
+/* The glyphs' cells are as wide as the size in ppem needs (see #glyph-size-style).
+   In browsers with grid layout, they also stretch to fill each row */
+#glyphs { margin-right: 150px; }
+.glyph { display: inline-block; vertical-align: top; margin: 2px;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+  border: 1px dashed grey; padding: 4px; cursor: pointer; overflow: hidden;
   background: none; color: inherit; font: inherit; text-align: center; }
+@supports (display: grid) {
+  #glyphs { display: grid; grid-gap: 4px; gap: 4px; }
+  .glyph { margin: 0; }
+}
 .glyph[aria-pressed="true"] { border: 1px solid black; }
 .glyph .missing { white-space: nowrap; }
 </style>
+<!-- The glyphs' cell size, set from the size in ppem -->
+<style id="glyph-size-style"></style>
 </head>
 <body>
 <div id="nav">
@@ -80,67 +98,108 @@ hinting on Windows, so open this page on Windows to inspect it.</p>
 </div>
 </div>
 <script>
-const DATA = {{hinting_json}};
-const TITLE = {{title_json}};
-const fontToggle = document.getElementById("font-toggle");
-const ppemSelect = document.getElementById("ppem");
-const instanceSelect = document.getElementById("instance");
-const filterInput = document.getElementById("filter");
-const textSample = document.getElementById("text-sample");
-const glyphsDiv = document.getElementById("glyphs");
-const WATERFALL_SIZES = Array.from({ length: 57 }, (_, i) => i + 8);
-const PPEM_SIZES = [...WATERFALL_SIZES, 72, 96];
-const DEFAULT_PPEM = 48;
+// ES5 only, without newer DOM methods (e.g. `replaceChildren()` or `append()`), as
+// the page has to work in old browsers too, e.g. Internet Explorer 11, Chrome 49
+// and Firefox 52 on old versions of Windows. tests/test_page.py checks for some of
+// the newer syntax and methods.
+var DATA = {{hinting_json}};
+var TITLE = {{title_json}};
+var fontToggle = document.getElementById("font-toggle");
+var ppemSelect = document.getElementById("ppem");
+var instanceSelect = document.getElementById("instance");
+var filterInput = document.getElementById("filter");
+var textSample = document.getElementById("text-sample");
+var glyphsDiv = document.getElementById("glyphs");
+var glyphSizeStyle = document.getElementById("glyph-size-style");
+var WATERFALL_SIZES = [];
+for (var size = 8; size <= 64; size++) WATERFALL_SIZES.push(size);
+var PPEM_SIZES = WATERFALL_SIZES.concat([72, 96]);
+var DEFAULT_PPEM = 48;
 // The settings are kept for the browser tab's session, so they stay the same when
 // another font's page is opened in the same tab (e.g. in a report's frame)
-const SETTINGS_KEY = "hinting-diff";
+var SETTINGS_KEY = "hinting-diff";
 // Like diffenator2's pages, one font is shown at a time, so switching between
 // them shows what changed
-let font = "old";
-let selectedGlyph = null;
+var font = "old";
+var selectedGlyph = null;
 // The sample text, if it's been edited
-let editedText = null;
+var editedText = null;
 
-if (!/Win/.test(navigator.userAgent)) {
-  document.getElementById("platform-warning").hidden = false;
+function indexWhere(items, test) {
+  for (var i = 0; i < items.length; i++) {
+    if (test(items[i])) return i;
+  }
+  return -1;
 }
 
-PPEM_SIZES.forEach((ppem) => {
-  const option = document.createElement("option");
+function removeChildren(element) {
+  while (element.firstChild) element.removeChild(element.firstChild);
+}
+
+// Appended as one fragment, so the page is laid out once
+function setChildren(element, children) {
+  var fragment = document.createDocumentFragment();
+  for (var i = 0; i < children.length; i++) fragment.appendChild(children[i]);
+  removeChildren(element);
+  element.appendChild(fragment);
+}
+
+// Like String.fromCodePoint(), for codepoints above U+FFFF too
+function codepointString(codepoint) {
+  if (codepoint <= 0xffff) return String.fromCharCode(codepoint);
+  var offset = codepoint - 0x10000;
+  return String.fromCharCode(0xd800 + (offset >> 10), 0xdc00 + (offset & 0x3ff));
+}
+
+function setHidden(element, hidden) {
+  element.hidden = hidden;
+  // For browsers that don't hide elements with the `hidden` attribute
+  element.style.display = hidden ? "none" : "";
+}
+
+if (!/Win/.test(navigator.userAgent)) {
+  setHidden(document.getElementById("platform-warning"), false);
+}
+
+PPEM_SIZES.forEach(function (ppem) {
+  var option = document.createElement("option");
   option.value = String(ppem);
   option.textContent = ppem + " ppem";
-  ppemSelect.append(option);
+  ppemSelect.appendChild(option);
 });
 ppemSelect.value = String(DEFAULT_PPEM);
-DATA.instances.forEach((instance, index) => {
-  const option = document.createElement("option");
+DATA.instances.forEach(function (instance, index) {
+  var option = document.createElement("option");
   option.value = String(index);
   option.textContent = instance.name;
-  instanceSelect.append(option);
+  instanceSelect.appendChild(option);
 });
-document.getElementById("instance-item").hidden = !DATA.instances.length;
+setHidden(document.getElementById("instance-item"), !DATA.instances.length);
 
 // Storage can be unavailable, e.g. for pages opened from files in some browsers
 function loadSettings() {
-  let settings = null;
+  var settings = null;
   try {
     settings = JSON.parse(sessionStorage.getItem(SETTINGS_KEY));
   } catch (error) {}
   if (!settings) return;
-  if (PPEM_SIZES.includes(settings.ppem)) ppemSelect.value = String(settings.ppem);
+  if (PPEM_SIZES.indexOf(settings.ppem) >= 0) ppemSelect.value = String(settings.ppem);
   if (settings.font === "old" || settings.font === "new") font = settings.font;
   if (typeof settings.filter === "string") filterInput.value = settings.filter;
   if (typeof settings.text === "string") editedText = settings.text;
-  selectedGlyph = DATA.glyphs.find((g) => g.name === settings.glyph) || null;
+  var index = indexWhere(DATA.glyphs, function (g) {
+    return g.name === settings.glyph;
+  });
+  selectedGlyph = index >= 0 ? DATA.glyphs[index] : null;
 }
 
 function saveSettings() {
-  const settings = {
+  var settings = {
     ppem: Number(ppemSelect.value),
-    font,
+    font: font,
     filter: filterInput.value,
     text: editedText,
-    glyph: selectedGlyph ? selectedGlyph.name : null,
+    glyph: selectedGlyph ? selectedGlyph.name : null
   };
   try {
     sessionStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -150,115 +209,162 @@ function saveSettings() {
 loadSettings();
 textSample.textContent = editedText === null ? DATA.sampleText : editedText;
 
+// The value of a parameter in the URL's fragment, e.g. "style" in "#style=Bold"
+function hashParam(name) {
+  var pairs = location.hash.slice(1).split("&");
+  for (var i = 0; i < pairs.length; i++) {
+    var pair = pairs[i].split("=");
+    if (decodeURIComponent(pair[0]) !== name) continue;
+    try {
+      return decodeURIComponent((pair[1] || "").replace(/\+/g, " "));
+    } catch (error) {
+      return null;
+    }
+  }
+  return null;
+}
+
 // A page that shows this one in a frame can pick a variable font's instance by
 // its name (e.g. "#style=A%20Regular"), which hides this page's own menu
 function applyStyleFromUrl() {
-  const params = new URLSearchParams(location.hash.slice(1));
-  const index = DATA.instances.findIndex((i) => i.name === params.get("style"));
+  var style = hashParam("style");
+  var index = indexWhere(DATA.instances, function (i) {
+    return i.name === style;
+  });
   if (index >= 0) instanceSelect.value = String(index);
-  document.getElementById("instance-item").hidden =
-    !DATA.instances.length || index >= 0;
+  setHidden(
+    document.getElementById("instance-item"),
+    !DATA.instances.length || index >= 0
+  );
 }
 applyStyleFromUrl();
-window.addEventListener("hashchange", () => {
+window.addEventListener("hashchange", function () {
   applyStyleFromUrl();
   render();
 });
 
 // CSS pixels are device pixels times the zoom and display scaling, so sizes are
 // divided by the ratio to get the size in device pixels per em
+function pixelRatio() {
+  return window.devicePixelRatio || 1;
+}
+
 function cssSize(ppem) {
-  return ppem / window.devicePixelRatio + "px";
+  return ppem / pixelRatio() + "px";
 }
 
 function variationSettings() {
-  const instance = DATA.instances[Number(instanceSelect.value)];
+  var instance = DATA.instances[Number(instanceSelect.value)];
   if (!instance) return "normal";
-  return Object.entries(instance.coords).map(([tag, v]) => `"${tag}" ${v}`).join(", ");
+  var settings = [];
+  for (var tag in instance.coords) {
+    if (Object.prototype.hasOwnProperty.call(instance.coords, tag)) {
+      settings.push('"' + tag + '" ' + instance.coords[tag]);
+    }
+  }
+  return settings.join(", ");
 }
 
 function styleSample(element, ppem) {
-  element.classList.remove("font-old", "font-new");
-  element.classList.add("font-" + font);
+  element.className = element.className.replace(/(^| )font-(old|new)\b/g, "");
+  element.className += " font-" + font;
   element.style.fontSize = cssSize(ppem);
+  // Browsers without variable fonts ignore it
   element.style.fontVariationSettings = variationSettings();
 }
 
 function glyphSample(glyph, ppem) {
-  const span = document.createElement("span");
+  var span = document.createElement("span");
   if (glyph[font] === null) {
     span.className = "missing";
     span.textContent = "not in " + font;
     return span;
   }
   span.className = "sample";
-  span.textContent = String.fromCodePoint(glyph[font]);
+  span.textContent = codepointString(glyph[font]);
   styleSample(span, ppem);
   return span;
 }
 
-function title(...parts) {
-  const instance = DATA.instances[Number(instanceSelect.value)];
-  return [font, TITLE, instance ? instance.name : null, ...parts]
+function title(parts) {
+  var instance = DATA.instances[Number(instanceSelect.value)];
+  return [font, TITLE, instance ? instance.name : null]
+    .concat(parts)
     .filter(Boolean)
     .join(" ");
 }
 
 function renderWaterfall() {
-  document.getElementById("waterfall").hidden = !selectedGlyph;
+  setHidden(document.getElementById("waterfall"), !selectedGlyph);
   if (!selectedGlyph) return;
-  document.getElementById("waterfall-title").textContent = title(
+  document.getElementById("waterfall-title").textContent = title([
     selectedGlyph.name,
-    `${WATERFALL_SIZES[0]}–${WATERFALL_SIZES[WATERFALL_SIZES.length - 1]} ppem`
-  );
-  document.getElementById("waterfall-samples").replaceChildren(
-    ...WATERFALL_SIZES.map((ppem) => {
-      const cell = document.createElement("span");
-      const label = document.createElement("span");
+    WATERFALL_SIZES[0] + "–" + WATERFALL_SIZES[WATERFALL_SIZES.length - 1] + " ppem"
+  ]);
+  setChildren(
+    document.getElementById("waterfall-samples"),
+    WATERFALL_SIZES.map(function (ppem) {
+      var cell = document.createElement("span");
+      var label = document.createElement("span");
       label.className = "size-label";
       label.textContent = String(ppem);
-      cell.append(glyphSample(selectedGlyph, ppem), label);
+      cell.appendChild(glyphSample(selectedGlyph, ppem));
+      cell.appendChild(label);
       return cell;
     })
   );
 }
 
+// Wide enough for most glyphs, which are cut off rather than overlapping
+function setGlyphCellSize(ppem) {
+  var width = Math.max(40, Math.ceil((ppem / pixelRatio()) * 1.25)) + "px";
+  glyphSizeStyle.textContent =
+    ".glyph { width: " + width + "; }\n" +
+    "@supports (display: grid) {\n" +
+    "  #glyphs { grid-template-columns: repeat(auto-fill, minmax(" + width + ", 1fr)); }\n" +
+    "  .glyph { width: auto; }\n" +
+    "}";
+}
+
+function glyphButton(glyph, ppem) {
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "glyph";
+  button.title = glyph.name;
+  button.setAttribute("aria-label", glyph.name);
+  button.setAttribute("aria-pressed", String(glyph === selectedGlyph));
+  button.appendChild(glyphSample(glyph, ppem));
+  button.addEventListener("click", function () {
+    selectedGlyph = glyph === selectedGlyph ? null : glyph;
+    saveSettings();
+    renderGlyphs();
+    renderWaterfall();
+  });
+  return button;
+}
+
 function renderGlyphs() {
-  const ppem = Number(ppemSelect.value);
-  const filter = filterInput.value.trim().toLowerCase();
+  var ppem = Number(ppemSelect.value);
+  var filter = filterInput.value.replace(/^\s+|\s+$/g, "").toLowerCase();
   document.getElementById("glyphs-title").textContent =
-    title(ppem + " ppem") + " (click a glyph for a waterfall, hover for its name)";
-  // Wide enough for most glyphs, which are cut off rather than overlapping
-  glyphsDiv.style.setProperty(
-    "--cell-size",
-    Math.max(40, Math.ceil((ppem / window.devicePixelRatio) * 1.25)) + "px"
-  );
-  glyphsDiv.replaceChildren(
-    ...DATA.glyphs
-      .filter((glyph) => !filter || glyph.name.toLowerCase().includes(filter))
-      .map((glyph) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "glyph";
-        button.title = glyph.name;
-        button.setAttribute("aria-label", glyph.name);
-        button.setAttribute("aria-pressed", String(glyph === selectedGlyph));
-        button.append(glyphSample(glyph, ppem));
-        button.addEventListener("click", () => {
-          selectedGlyph = glyph === selectedGlyph ? null : glyph;
-          saveSettings();
-          renderGlyphs();
-          renderWaterfall();
-        });
-        return button;
+    title([ppem + " ppem"]) + " (click a glyph for a waterfall, hover for its name)";
+  setGlyphCellSize(ppem);
+  setChildren(
+    glyphsDiv,
+    DATA.glyphs
+      .filter(function (glyph) {
+        return !filter || glyph.name.toLowerCase().indexOf(filter) >= 0;
+      })
+      .map(function (glyph) {
+        return glyphButton(glyph, ppem);
       })
   );
 }
 
 function render() {
-  const ppem = Number(ppemSelect.value);
+  var ppem = Number(ppemSelect.value);
   fontToggle.textContent = font;
-  document.getElementById("text-title").textContent = title(ppem + " ppem");
+  document.getElementById("text-title").textContent = title([ppem + " ppem"]);
   styleSample(textSample, ppem);
   renderWaterfall();
   renderGlyphs();
@@ -269,19 +375,40 @@ function change() {
   render();
 }
 
-fontToggle.addEventListener("click", () => {
+function textChanged() {
+  if (textSample.textContent === (editedText === null ? DATA.sampleText : editedText)) {
+    return;
+  }
+  editedText = textSample.textContent;
+  saveSettings();
+}
+
+fontToggle.addEventListener("click", function () {
   font = font === "old" ? "new" : "old";
   change();
 });
 ppemSelect.addEventListener("change", change);
 instanceSelect.addEventListener("change", render);
-filterInput.addEventListener("input", () => {
+// Internet Explorer doesn't send "input" events for some changes, so "keyup" and
+// "change" are listened to as well
+function filterChanged() {
   saveSettings();
   renderGlyphs();
+}
+var lastFilter = filterInput.value;
+["input", "keyup", "change"].forEach(function (type) {
+  filterInput.addEventListener(type, function () {
+    if (filterInput.value === lastFilter) return;
+    lastFilter = filterInput.value;
+    filterChanged();
+  });
 });
-textSample.addEventListener("input", () => {
-  editedText = textSample.textContent;
-  saveSettings();
+// Internet Explorer doesn't send "input" events for editable elements
+["input", "keyup", "blur", "paste", "cut"].forEach(function (type) {
+  textSample.addEventListener(type, function () {
+    // After a paste or cut has changed the text
+    setTimeout(textChanged, 0);
+  });
 });
 // The pixel ratio changes with the browser's zoom, which resizes the window
 window.addEventListener("resize", render);

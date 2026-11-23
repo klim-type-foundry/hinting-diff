@@ -12,18 +12,24 @@ concurrency:
   group: ci-ship-release-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
+# Each job asks for the permissions it needs
+permissions: {}
 
 jobs:
-  release:
-    name: 'Ship hinting-diff release'
+  build:
+    name: 'Release: build'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Set up Python & run checks
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           activate-environment: true
           venv-path: ${{ runner.temp }}/venv
@@ -38,8 +44,8 @@ jobs:
         run: |
           pytest
 
-      # Ship
-      - name: Create release
+      - name: Check version
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -59,9 +65,59 @@ jobs:
               exit 1
             fi
           fi
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+
+      # Build the sdist and wheel, and check that PyPI will accept and show them
+      - name: Build package
+        run: |
+          uv build --no-sources
+          twine check --strict dist/*
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # Publish to PyPI with trusted publishing, so no PyPI token is stored in GitHub.
+  # PyPI only accepts uploads from this workflow, in the `pypi` environment.
+  pypi:
+    name: 'Release: publish to PyPI'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/hinting-diff/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+
+  # Create the GitHub release after publishing to PyPI, so a failed upload can be
+  # re-run without a release already existing for the version
+  github-release:
+    name: 'Release: create GitHub release'
+    needs: [build, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
           # Tag the commit that triggered the workflow, rather than the latest
           # commit on `main`, which may already include later, unreleased changes
-          gh release create "v$RELEASE_VERSION" \
+          gh release create "v$RELEASE_VERSION" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
             --title "v$RELEASE_VERSION" \
             --target "$GITHUB_SHA" \
             --generate-notes

@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "hinting-diff"
 # The version is in the VERSION file (see [tool.setuptools.dynamic]), so uv.lock
 # doesn't include it and doesn't need updating when it changes. Pushing a VERSION
-# change to `main` creates a GitHub release (see .github/workflows/release.yml)
+# change to `main` publishes the package to PyPI and creates a GitHub release (see
+# .github/workflows/release.yml)
 dynamic = ["version"]
 description = "Compare the TrueType hinting of two versions of a font in a browser"
 authors = [{ name = "Klim Type Foundry" }]
@@ -17,9 +18,18 @@ requires-python = ">=3.10"
 keywords = ["fonts", "truetype", "hinting", "diff"]
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Environment :: Console",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Text Processing :: Fonts",
+    "Typing :: Typed",
 ]
 # Projects that use this package pin their own exact versions, so keep these
 # ranges wide. Exact versions for development are pinned in uv.lock
@@ -27,6 +37,8 @@ dependencies = ["fonttools>=4.40,<5"]
 
 [project.urls]
 Source = "https://github.com/klim-type-foundry/hinting-diff"
+Issues = "https://github.com/klim-type-foundry/hinting-diff/issues"
+Changelog = "https://github.com/klim-type-foundry/hinting-diff/releases"
 
 [project.scripts]
 hinting-diff = "hinting_diff.cli:main"
@@ -39,6 +51,7 @@ dev = [
     "pre-commit>=4,<5",
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
+    "twine>=7,<8",
 ]
 
 [tool.setuptools.dynamic]
