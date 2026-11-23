@@ -62,6 +62,12 @@ request.
   "Show the glyph's Unicode value on hover".
 - Don't change `VERSION`: the maintainers do that when releasing.
 
+## Releasing (maintainers)
+
+To release a new version, change the version in `VERSION` and merge it into
+`main`. The release workflow runs the checks and creates a GitHub release
+tagged with the version (e.g. `v0.1.0`).
+
 ## Licence
 
 By contributing, you agree that your contributions are licensed under the

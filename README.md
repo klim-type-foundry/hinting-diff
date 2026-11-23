@@ -147,23 +147,15 @@ Only their `cmap` table changes: the other tables, including `glyf`, `fpgm`,
 variable font swaps with feature variations (`rvrn`) at the selected instance
 show the swapped glyph, as they would in use.
 
-## Development
+## Contributing
 
-With [uv](https://docs.astral.sh/uv/) installed:
-
-```shell
-make init
-make test
-```
-
-`make init` sets up the Python environment in `.venv/` with the exact package
-versions from `uv.lock`, and installs the [pre-commit](https://pre-commit.com/)
-hooks, which run Ruff, mypy and some general file checks.
-
-To release a new version, change the version in `VERSION` and merge it into
-`main`. The release workflow runs the checks and creates a GitHub release
-tagged with the version (e.g. `v0.1.0`).
+Bug reports, ideas and pull requests are welcome: see the
+[contributing guide](https://github.com/klim-type-foundry/hinting-diff/blob/main/CONTRIBUTING.md)
+for how to set up the project and make a change. Please report security
+problems privately, as the
+[security policy](https://github.com/klim-type-foundry/hinting-diff/blob/main/SECURITY.md)
+explains.
 
 ## Licence
 
-[Apache License 2.0](LICENSE.txt)
+[Apache License 2.0](https://github.com/klim-type-foundry/hinting-diff/blob/main/LICENSE.txt)
