@@ -1,5 +1,10 @@
 # hinting-diff
 
+[![PyPI](https://img.shields.io/pypi/v/hinting-diff)](https://pypi.org/project/hinting-diff/)
+[![Python versions](https://img.shields.io/pypi/pyversions/hinting-diff)](https://pypi.org/project/hinting-diff/)
+[![Checks](https://github.com/klim-type-foundry/hinting-diff/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/klim-type-foundry/hinting-diff/actions/workflows/check.yml)
+[![Licence](https://img.shields.io/pypi/l/hinting-diff)](https://github.com/klim-type-foundry/hinting-diff/blob/main/LICENSE.txt)
+
 Compare the TrueType hinting of two versions of a font in a browser.
 
 `hinting-diff` writes an HTML page that shows every glyph of a font, encoded or
