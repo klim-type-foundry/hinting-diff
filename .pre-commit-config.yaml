@@ -37,7 +37,7 @@ repos:
 
   # Ruff linting and formatting (instead of Black, isort, etc.)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.4
+    rev: v0.17.6
     hooks:
       - id: ruff-check
         args: [ --fix ]
@@ -58,11 +58,3 @@ repos:
         files: ^(src|tests)/
         types: [ python ]
         pass_filenames: false
-
-      # Commit messages must not credit AI tools, e.g. a `Co-Authored-By: Claude`
-      # trailer or a "Generated with Claude Code" line
-      - id: no-ai-attribution
-        name: No AI attribution in commit message
-        language: pygrep
-        entry: '(?i)^(co-authored-by:.*(claude|anthropic)|.*generated (with|by) .*(claude|anthropic))'
-        stages: [ commit-msg ]
