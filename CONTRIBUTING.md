@@ -52,7 +52,12 @@ request.
 - **Documentation:** if you change the command's options or the Python API,
   update the [README](README.md) too.
 - **Browsers:** if you change the page, check it in a browser on Windows, as
-  that's the only platform where browsers apply TrueType hinting.
+  that's the only platform where browsers apply TrueType hinting. The page has to
+  work in old browsers too, back to Internet Explorer 11, Chrome 49 and Firefox
+  52, so its script is ES5 only, without newer DOM methods like `append()` or
+  `replaceChildren()`, and newer CSS only refines a layout that works without it
+  (e.g. in `@supports`). A test checks the script for the usual newer syntax and
+  methods.
 
 ### Pull requests
 

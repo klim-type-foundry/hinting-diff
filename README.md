@@ -17,7 +17,9 @@ and see what changed.
 <sub>Source Sans Pro without hinting (old) and hinted with ttfautohint (new), in
 Firefox on Windows 11, enlarged 3×.</sub>
 
-Browsers only apply TrueType hinting on Windows, so open the page on Windows.
+Browsers only apply TrueType hinting on Windows, so open the page on Windows. It
+works in old browsers too, as far back as Internet Explorer 11, Chrome 49 and
+Firefox 52, for checking hinting on old versions of Windows.
 
 ## Install
 
