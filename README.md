@@ -12,6 +12,11 @@ not, rendered with its hinting at a size in pixels per em (ppem), for the old
 and the new version of the font. Click **old**/**new** to switch between them
 and see what changed.
 
+![A waterfall of the letter "a" from 8 to 19 ppem, switching between the old, unhinted font, whose small sizes are blurry and uneven, and the new, hinted font, whose small sizes are sharper and more even](https://raw.githubusercontent.com/klim-type-foundry/hinting-diff/main/docs/hinting-diff.webp)
+
+<sub>Source Sans Pro without hinting (old) and hinted with ttfautohint (new), in
+Firefox on Windows 11, enlarged 3×.</sub>
+
 Browsers only apply TrueType hinting on Windows, so open the page on Windows.
 
 ## Install
@@ -31,6 +36,27 @@ hinting-diff old/Family-Regular.ttf new/Family-Regular.ttf -o hinting-diff/
 
 This writes `hinting-diff/Family-Regular-hinting.html`, with copies of both
 fonts next to it, and prints the page's path. Open it in a browser on Windows.
+
+The output folder is optional, and is `hinting-diff` by default. All the
+options:
+
+```text
+usage: hinting-diff [-h] [-o OUTPUT] [--version] before after
+
+Write a page to compare the TrueType hinting of two versions of a font.
+Browsers only apply TrueType hinting on Windows, so open the page on Windows.
+
+positional arguments:
+  before                the old font (TTF)
+  after                 the new font (TTF)
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTPUT, --output OUTPUT
+                        folder for the page and copies of the fonts (default:
+                        hinting-diff)
+  --version             show program's version number and exit
+```
 
 The page has:
 
