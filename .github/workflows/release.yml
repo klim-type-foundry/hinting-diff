@@ -71,7 +71,7 @@ jobs:
       - name: Build package
         run: |
           uv build --no-sources
-          uvx twine check --strict dist/*
+          twine check --strict dist/*
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist

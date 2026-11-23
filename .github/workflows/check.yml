@@ -38,3 +38,41 @@ jobs:
       - name: Run unit tests
         run: |
           pytest
+
+      # Build the sdist and wheel, and check that PyPI will accept and show them,
+      # so a problem is found here rather than when releasing
+      - name: Build package
+        run: |
+          uv build --no-sources --out-dir "$RUNNER_TEMP/dist"
+          twine check --strict "$RUNNER_TEMP"/dist/*
+
+  # Test on the oldest supported Python with the oldest dependency versions the
+  # package allows, and on the newest Python with the newest versions, as users
+  # can install it with any of them. The checks above use the versions in uv.lock
+  python-versions:
+    name: 'Push: Python ${{ matrix.python }}, ${{ matrix.resolution }} dependencies'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.10'
+            resolution: lowest-direct
+          - python: '3.14'
+            resolution: highest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ matrix.python }}
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
+      - name: Install Python dependencies
+        run: |
+          uv pip install --resolution ${{ matrix.resolution }} --group dev .
+      - name: Run type checks
+        run: |
+          mypy
+      - name: Run unit tests
+        run: |
+          pytest
