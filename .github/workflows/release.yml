@@ -1,0 +1,67 @@
+name: Ship hinting-diff release
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+
+# Run releases one at a time, in order, without cancelling any (only the latest
+# waiting run is kept, if several are queued)
+concurrency:
+  group: ci-ship-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 'Ship hinting-diff release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Set up Python & run checks
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
+          cache-dependency-glob: uv.lock
+      - name: Install Python dependencies
+        run: |
+          uv sync --locked --active
+      - name: Run type checks
+        run: |
+          mypy
+      - name: Run unit tests
+        run: |
+          pytest
+
+      # Ship
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_VERSION="$(head -1 VERSION | tr -d '[:space:]')"
+          echo "Release version number: $RELEASE_VERSION"
+          # The latest release that isn't a pre-release, if any
+          LATEST_TAG="$(gh release list --exclude-pre-releases --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')"
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::warning::No previous release found. Skipping version check."
+          else
+            echo "Latest GitHub release version: $LATEST_TAG"
+            # The new version must be higher than that of the latest release
+            LATEST_VERSION="${LATEST_TAG#v}"
+            HIGHEST_VERSION="$(printf '%s\n%s\n' "$RELEASE_VERSION" "$LATEST_VERSION" | sort -V | tail -1)"
+            if [ "$RELEASE_VERSION" = "$LATEST_VERSION" ] || [ "$HIGHEST_VERSION" != "$RELEASE_VERSION" ]; then
+              echo "::error::'$RELEASE_VERSION' is not higher than '$LATEST_TAG'"
+              exit 1
+            fi
+          fi
+          # Tag the commit that triggered the workflow, rather than the latest
+          # commit on `main`, which may already include later, unreleased changes
+          gh release create "v$RELEASE_VERSION" \
+            --title "v$RELEASE_VERSION" \
+            --target "$GITHUB_SHA" \
+            --generate-notes

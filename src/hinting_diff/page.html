@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hinting: {{title}}</title>
+<style>
+@font-face { font-family: "hinting-old"; src: url("{{before_font}}"); }
+@font-face { font-family: "hinting-new"; src: url("{{after_font}}"); }
+/* The look of diffenator2's pages, so the page fits in with them in a report */
+html { font-family: sans-serif; }
+body { font-family: Helvetica; }
+#nav { position: fixed; right: 20px; z-index: 100; }
+.nav-item { display: block; cursor: pointer; user-select: none; text-align: center;
+  color: white; background-color: black; font-size: 9pt; padding: 5px;
+  margin: 2px; }
+/* .nav-item's display would show hidden items */
+.nav-item[hidden] { display: none; }
+.nav-item select, .nav-item input { background-color: black; color: white;
+  font-size: 9pt; }
+.nav-item input { width: 7em; border: 1px solid white; }
+.box-title { width: 100%; font-size: 8pt; font-weight: 700;
+  border-top: 1px solid black; padding-top: 5px; margin-bottom: 10pt;
+  display: block; }
+.box { margin-bottom: 20pt; }
+.warning { font-size: 9pt; }
+.sample { font-kerning: none; font-feature-settings: "liga" 0, "clig" 0, "calt" 0;
+  font-synthesis: none; line-height: 1.2; white-space: pre; }
+.box-text { outline: none; }
+/* Every character the font encodes, wrapped anywhere, as it has no spaces */
+#text-sample { white-space: pre-wrap; overflow-wrap: anywhere;
+  margin-right: 150px; }
+.font-old { font-family: "hinting-old"; }
+.font-new { font-family: "hinting-new"; }
+.missing { font-size: 8pt; color: #888; }
+.size-label { display: block; font-size: 7pt; color: #888; }
+#waterfall-samples { display: flex; flex-wrap: wrap; gap: 4px 12px;
+  align-items: baseline; margin-right: 150px; }
+/* --cell-size is set from the size in ppem */
+#glyphs { display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cell-size, 40px), 1fr));
+  gap: 4px; margin-right: 150px; }
+.glyph { border: 1px dashed grey; padding: 4px; cursor: pointer; overflow: hidden;
+  background: none; color: inherit; font: inherit; text-align: center; }
+.glyph[aria-pressed="true"] { border: 1px solid black; }
+.glyph .missing { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="nav">
+<div class="nav-item" id="font-toggle">old</div>
+<div class="nav-item">
+<label for="ppem">Font Size:</label>
+<select id="ppem"></select>
+</div>
+<div class="nav-item" id="instance-item" hidden>
+<label for="instance">Instance:</label>
+<select id="instance"></select>
+</div>
+<div class="nav-item">
+<label for="filter">Glyphs:</label>
+<input type="text" id="filter" placeholder="Filter by name">
+</div>
+</div>
+<div id="content">
+<h2><b>Hinting</b></h2>
+<p class="warning" id="platform-warning" hidden>Browsers only apply TrueType
+hinting on Windows, so open this page on Windows to inspect it.</p>
+<div class="box">
+<div class="box-title" id="text-title"></div>
+<div contenteditable="true" spellcheck="false" class="box-text sample"
+  id="text-sample"></div>
+</div>
+<div class="box" id="waterfall" hidden>
+<div class="box-title" id="waterfall-title"></div>
+<div id="waterfall-samples"></div>
+</div>
+<div class="box">
+<div class="box-title" id="glyphs-title"></div>
+<div id="glyphs"></div>
+</div>
+</div>
+<script>
+const DATA = {{hinting_json}};
+const TITLE = {{title_json}};
+const fontToggle = document.getElementById("font-toggle");
+const ppemSelect = document.getElementById("ppem");
+const instanceSelect = document.getElementById("instance");
+const filterInput = document.getElementById("filter");
+const textSample = document.getElementById("text-sample");
+const glyphsDiv = document.getElementById("glyphs");
+const WATERFALL_SIZES = Array.from({ length: 57 }, (_, i) => i + 8);
+const PPEM_SIZES = [...WATERFALL_SIZES, 72, 96];
+const DEFAULT_PPEM = 48;
+// The settings are kept for the browser tab's session, so they stay the same when
+// another font's page is opened in the same tab (e.g. in a report's frame)
+const SETTINGS_KEY = "hinting-diff";
+// Like diffenator2's pages, one font is shown at a time, so switching between
+// them shows what changed
+let font = "old";
+let selectedGlyph = null;
+// The sample text, if it's been edited
+let editedText = null;
+
+if (!/Win/.test(navigator.userAgent)) {
+  document.getElementById("platform-warning").hidden = false;
+}
+
+PPEM_SIZES.forEach((ppem) => {
+  const option = document.createElement("option");
+  option.value = String(ppem);
+  option.textContent = ppem + " ppem";
+  ppemSelect.append(option);
+});
+ppemSelect.value = String(DEFAULT_PPEM);
+DATA.instances.forEach((instance, index) => {
+  const option = document.createElement("option");
+  option.value = String(index);
+  option.textContent = instance.name;
+  instanceSelect.append(option);
+});
+document.getElementById("instance-item").hidden = !DATA.instances.length;
+
+// Storage can be unavailable, e.g. for pages opened from files in some browsers
+function loadSettings() {
+  let settings = null;
+  try {
+    settings = JSON.parse(sessionStorage.getItem(SETTINGS_KEY));
+  } catch (error) {}
+  if (!settings) return;
+  if (PPEM_SIZES.includes(settings.ppem)) ppemSelect.value = String(settings.ppem);
+  if (settings.font === "old" || settings.font === "new") font = settings.font;
+  if (typeof settings.filter === "string") filterInput.value = settings.filter;
+  if (typeof settings.text === "string") editedText = settings.text;
+  selectedGlyph = DATA.glyphs.find((g) => g.name === settings.glyph) || null;
+}
+
+function saveSettings() {
+  const settings = {
+    ppem: Number(ppemSelect.value),
+    font,
+    filter: filterInput.value,
+    text: editedText,
+    glyph: selectedGlyph ? selectedGlyph.name : null,
+  };
+  try {
+    sessionStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (error) {}
+}
+
+loadSettings();
+textSample.textContent = editedText === null ? DATA.sampleText : editedText;
+
+// A page that shows this one in a frame can pick a variable font's instance by
+// its name (e.g. "#style=A%20Regular"), which hides this page's own menu
+function applyStyleFromUrl() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const index = DATA.instances.findIndex((i) => i.name === params.get("style"));
+  if (index >= 0) instanceSelect.value = String(index);
+  document.getElementById("instance-item").hidden =
+    !DATA.instances.length || index >= 0;
+}
+applyStyleFromUrl();
+window.addEventListener("hashchange", () => {
+  applyStyleFromUrl();
+  render();
+});
+
+// CSS pixels are device pixels times the zoom and display scaling, so sizes are
+// divided by the ratio to get the size in device pixels per em
+function cssSize(ppem) {
+  return ppem / window.devicePixelRatio + "px";
+}
+
+function variationSettings() {
+  const instance = DATA.instances[Number(instanceSelect.value)];
+  if (!instance) return "normal";
+  return Object.entries(instance.coords).map(([tag, v]) => `"${tag}" ${v}`).join(", ");
+}
+
+function styleSample(element, ppem) {
+  element.classList.remove("font-old", "font-new");
+  element.classList.add("font-" + font);
+  element.style.fontSize = cssSize(ppem);
+  element.style.fontVariationSettings = variationSettings();
+}
+
+function glyphSample(glyph, ppem) {
+  const span = document.createElement("span");
+  if (glyph[font] === null) {
+    span.className = "missing";
+    span.textContent = "not in " + font;
+    return span;
+  }
+  span.className = "sample";
+  span.textContent = String.fromCodePoint(glyph[font]);
+  styleSample(span, ppem);
+  return span;
+}
+
+function title(...parts) {
+  const instance = DATA.instances[Number(instanceSelect.value)];
+  return [font, TITLE, instance ? instance.name : null, ...parts]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function renderWaterfall() {
+  document.getElementById("waterfall").hidden = !selectedGlyph;
+  if (!selectedGlyph) return;
+  document.getElementById("waterfall-title").textContent = title(
+    selectedGlyph.name,
+    `${WATERFALL_SIZES[0]}–${WATERFALL_SIZES[WATERFALL_SIZES.length - 1]} ppem`
+  );
+  document.getElementById("waterfall-samples").replaceChildren(
+    ...WATERFALL_SIZES.map((ppem) => {
+      const cell = document.createElement("span");
+      const label = document.createElement("span");
+      label.className = "size-label";
+      label.textContent = String(ppem);
+      cell.append(glyphSample(selectedGlyph, ppem), label);
+      return cell;
+    })
+  );
+}
+
+function renderGlyphs() {
+  const ppem = Number(ppemSelect.value);
+  const filter = filterInput.value.trim().toLowerCase();
+  document.getElementById("glyphs-title").textContent =
+    title(ppem + " ppem") + " (click a glyph for a waterfall, hover for its name)";
+  // Wide enough for most glyphs, which are cut off rather than overlapping
+  glyphsDiv.style.setProperty(
+    "--cell-size",
+    Math.max(40, Math.ceil((ppem / window.devicePixelRatio) * 1.25)) + "px"
+  );
+  glyphsDiv.replaceChildren(
+    ...DATA.glyphs
+      .filter((glyph) => !filter || glyph.name.toLowerCase().includes(filter))
+      .map((glyph) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "glyph";
+        button.title = glyph.name;
+        button.setAttribute("aria-label", glyph.name);
+        button.setAttribute("aria-pressed", String(glyph === selectedGlyph));
+        button.append(glyphSample(glyph, ppem));
+        button.addEventListener("click", () => {
+          selectedGlyph = glyph === selectedGlyph ? null : glyph;
+          saveSettings();
+          renderGlyphs();
+          renderWaterfall();
+        });
+        return button;
+      })
+  );
+}
+
+function render() {
+  const ppem = Number(ppemSelect.value);
+  fontToggle.textContent = font;
+  document.getElementById("text-title").textContent = title(ppem + " ppem");
+  styleSample(textSample, ppem);
+  renderWaterfall();
+  renderGlyphs();
+}
+
+function change() {
+  saveSettings();
+  render();
+}
+
+fontToggle.addEventListener("click", () => {
+  font = font === "old" ? "new" : "old";
+  change();
+});
+ppemSelect.addEventListener("change", change);
+instanceSelect.addEventListener("change", render);
+filterInput.addEventListener("input", () => {
+  saveSettings();
+  renderGlyphs();
+});
+textSample.addEventListener("input", () => {
+  editedText = textSample.textContent;
+  saveSettings();
+});
+// The pixel ratio changes with the browser's zoom, which resizes the window
+window.addEventListener("resize", render);
+render();
+</script>
+</body>
+</html>

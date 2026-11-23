@@ -1,0 +1,40 @@
+name: Check pushed files
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-checks-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: 'Push: General checks'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Run pre-commit checks
+      - uses: pre-commit/action@v3.0.1
+        env:
+          # mypy needs the Python dependencies, so it runs separately below
+          SKIP: mypy
+
+      # Set up Python & run unit tests
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
+          cache-dependency-glob: uv.lock
+      - name: Install Python dependencies
+        run: |
+          uv sync --locked --active
+      - name: Run type checks
+        run: |
+          mypy
+      - name: Run unit tests
+        run: |
+          pytest
