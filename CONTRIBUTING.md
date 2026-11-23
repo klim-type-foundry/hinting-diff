@@ -65,8 +65,15 @@ request.
 ## Releasing (maintainers)
 
 To release a new version, change the version in `VERSION` and merge it into
-`main`. The release workflow runs the checks and creates a GitHub release
-tagged with the version (e.g. `v0.1.0`).
+`main`. The release workflow runs the checks, builds the package, publishes it
+to [PyPI](https://pypi.org/project/hinting-diff/), and then creates a GitHub
+release tagged with the version (e.g. `v0.1.0`), with the package's files
+attached.
+
+The workflow publishes to PyPI with
+[trusted publishing](https://docs.pypi.org/trusted-publishers/), so there's no
+PyPI token to manage. PyPI only accepts uploads from `release.yml` in the
+`pypi` environment, which can only be used from `main`.
 
 ## Licence
 

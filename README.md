@@ -12,10 +12,11 @@ Browsers only apply TrueType hinting on Windows, so open the page on Windows.
 ## Install
 
 ```shell
-pip install "hinting-diff @ git+https://github.com/klim-type-foundry/hinting-diff@v0.1.0"
+pip install hinting-diff
 ```
 
-It needs Python 3.10 or later, and [fontTools](https://github.com/fonttools/fonttools).
+It needs Python 3.10 or later, and installs
+[fontTools](https://github.com/fonttools/fonttools) too.
 
 ## Usage
 
