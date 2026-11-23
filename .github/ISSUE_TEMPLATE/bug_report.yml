@@ -1,0 +1,44 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead? A screenshot of the page helps a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      description: The command you ran, or the Python code you used.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: hinting-diff version
+      description: The output of `hinting-diff --version`.
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Where you ran it
+      description: Your operating system and Python version.
+      placeholder: e.g. macOS 15, Python 3.12
+  - type: input
+    id: browser
+    attributes:
+      label: Where you opened the page
+      description: The browser and operating system you opened the page on, if the problem is on the page.
+      placeholder: e.g. Chrome 140 on Windows 11
+  - type: textarea
+    id: fonts
+    attributes:
+      label: Fonts
+      description: If you can, attach the fonts (or a smaller font that shows the problem), or say if you can't share them.
