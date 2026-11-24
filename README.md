@@ -5,12 +5,14 @@
 [![Checks](https://github.com/klim-type-foundry/hinting-diff/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/klim-type-foundry/hinting-diff/actions/workflows/check.yml)
 [![Licence](https://img.shields.io/pypi/l/hinting-diff)](https://github.com/klim-type-foundry/hinting-diff/blob/main/LICENSE.txt)
 
-Compare the TrueType hinting of two versions of a font in a browser.
+Compare the TrueType hinting of two versions of a font, or a family of fonts,
+in a browser.
 
 `hinting-diff` writes an HTML page that shows every glyph of a font, encoded or
 not, rendered with its hinting at a size in pixels per em (ppem), for the old
 and the new version of the font. Click **old**/**new** to switch between them
-and see what changed.
+and see what changed. For a family, it writes a page for each font, and an index
+page that links to them.
 
 ![A waterfall of the letter "a" from 8 to 19 ppem, switching between the old, unhinted font, whose small sizes are blurry and uneven, and the new, hinted font, whose small sizes are sharper and more even](https://raw.githubusercontent.com/klim-type-foundry/hinting-diff/main/docs/hinting-diff.webp)
 
@@ -39,23 +41,55 @@ hinting-diff old/Family-Regular.ttf new/Family-Regular.ttf -o hinting-diff/
 This writes `hinting-diff/Family-Regular-hinting.html`, with copies of both
 fonts next to it, and prints the page's path. Open it in a browser on Windows.
 
+To compare a family, give the folders of the old and the new fonts, or the fonts
+with `-fb`/`--fonts-before` and `-fa`/`--fonts-after`, as in
+[diffenator2](https://github.com/googlefonts/diffenator2):
+
+```shell
+hinting-diff old/ new/
+hinting-diff -fb old/*.ttf -fa new/*.ttf
+```
+
+Fonts are matched by their file names, and folders' subfolders are searched too.
+A font that's only in the old or only in the new fonts is skipped, with a
+warning. This writes a page for each font, and an `index.html` page that links
+to them, and prints their paths, with the index page last. A single old font and
+a single new font, given on their own, are compared whatever their names.
+
+If a font can't be read, the other fonts' pages are still written, and the
+command exits with an error.
+
 The output folder is optional, and is `hinting-diff` by default. All the
 options:
 
 ```text
-usage: hinting-diff [-h] [-o OUTPUT] [--version] before after
+usage: 
+  hinting-diff [-h] [-o OUT] [--version] BEFORE AFTER
+  hinting-diff [-h] [-o OUT] [--version] -fb FONT [FONT ...] -fa FONT [FONT ...]
+  hinting-diff [-h] [-o OUT] [--version] AFTER [AFTER ...] --commit [REF]
 
-Write a page to compare the TrueType hinting of two versions of a font.
-Browsers only apply TrueType hinting on Windows, so open the page on Windows.
+Write pages to compare the TrueType hinting of two versions of fonts. Give the
+old and new font, or folders of them, or several fonts with -fb and -fa: fonts
+are matched by their file names. Or give the new fonts, or folders of them, in
+a git repository, with --commit to compare them with the fonts at the same
+paths in a commit. Browsers only apply TrueType hinting on Windows, so open
+the pages on Windows.
 
 positional arguments:
-  before                the old font (TTF)
-  after                 the new font (TTF)
+  BEFORE AFTER          the old and the new font (TTF), or folders of fonts.
+                        With --commit, the new fonts or folders
 
 options:
   -h, --help            show this help message and exit
-  -o OUTPUT, --output OUTPUT
-                        folder for the page and copies of the fonts (default:
+  -fb FONT [FONT ...], --fonts-before FONT [FONT ...]
+                        the old fonts (TTF), or folders of fonts
+  -fa FONT [FONT ...], --fonts-after FONT [FONT ...]
+                        the new fonts (TTF), or folders of fonts
+  --commit [REF]        compare the new fonts with the fonts at the same paths
+                        in this commit, e.g. HEAD~1 or a tag (default: HEAD,
+                        the last commit)
+  -o OUT, --out OUT, --output OUT
+                        folder for the pages and copies of the fonts (default:
                         hinting-diff)
   --version             show program's version number and exit
 ```
@@ -64,20 +98,46 @@ The page has:
 
 - **Sample text**, which starts as every character the new font encodes
   (without combining marks or spaces), for a quick look over the whole character
-  set. You can edit it.
+  set. Choose **Basic Latin** in the **Text** menu for its letters, figures and
+  punctuation, or edit the text to use your own (**Custom**). Tick **Text
+  waterfall** to show the text from 8 to 64 ppem, one line for each size, cut off
+  at the right: editing the text at one size changes it at the others.
 - **Every glyph**, at the **Font Size** you choose (48 ppem to start with).
   Hover over a glyph to see its name, or filter the glyphs by name. Glyphs that
   are only in one of the fonts say so.
 - **A waterfall** of a glyph from 8 to 64 ppem: click a glyph to show it.
 - For variable fonts, an **Instance** menu with the font's named instances.
 
-The size, font, filter, selected glyph and edited text are kept for the browser
+The size, font, text, filter and selected glyph are kept for the browser
 tab's session, so they stay the same when you open another font's page in the
 same tab.
 
 Sizes are in device pixels, so they stay the same with browser zoom or display
 scaling (e.g. 150% in Windows), which change how many device pixels a CSS pixel
 is.
+
+### Comparing with a commit
+
+In a git repository, give only the new fonts, or folders of them, with
+`--commit` to compare them with the fonts at the same paths in a commit:
+
+```shell
+hinting-diff fonts/ttf/ --commit
+hinting-diff fonts/ttf/*.ttf --commit HEAD~1
+hinting-diff fonts/ttf/Family-Regular.ttf --commit v1.2.0
+```
+
+By default, the fonts are compared with the last commit (`HEAD`), e.g. to check
+fonts you've just built before committing them. Give another commit, e.g.
+`HEAD~1`, a branch, a tag or a commit hash, to compare with that. Put `--commit`
+after the fonts, or give its commit, as in `--commit HEAD fonts/ttf/`: otherwise
+the fonts' path is taken as the commit.
+
+A font that wasn't in the commit, or one in a folder that was in the commit but
+isn't now, is skipped, with a warning. The old fonts are read from the local
+repository, so `git` needs to be installed, and the commit needs to be there,
+e.g. `git fetch` first for `origin/main`. Fonts in
+[Git LFS](https://git-lfs.com) work too, if `git lfs` is installed.
 
 ### Showing the page in a report
 
@@ -93,7 +153,7 @@ pages as part of a bigger report.
 
 ### Writing a page
 
-`write_hinting_page()` does the same as the `hinting-diff` command:
+`write_hinting_page()` writes the page for one font:
 
 ```python
 from pathlib import Path
@@ -119,23 +179,75 @@ Its arguments are:
 
 It returns the page's path. The copies of the fonts are saved next to the page as
 `hinting-old-<new font's file name>` and `hinting-new-<new font's file name>`, so
-pages for several fonts can share a folder:
+pages for several fonts can share a folder.
+
+It doesn't check that the fonts exist first: a missing or broken font raises
+fontTools' or Python's own error (e.g. `FileNotFoundError`), and a font with too
+many glyphs to map to Private Use Area codepoints raises a `ValueError`.
+
+### Writing pages for a family
+
+`match_fonts()` matches old and new fonts by their file names, as the command
+does, and `write_index_page()` writes a page that links to hinting pages:
 
 ```python
 from pathlib import Path
 
-from hinting_diff import write_hinting_page
+from hinting_diff import match_fonts, write_hinting_page, write_index_page
 
-for after_path in sorted(Path("new").glob("*.ttf")):
-    before_path = Path("old", after_path.name)
-    if before_path.is_file():
-        write_hinting_page(before_path, after_path, Path("hinting-diff"))
+font_match = match_fonts([Path("old")], [Path("new")])
+for after_path in font_match.only_after:
+    print(f"{after_path.name} is new")
+page_paths = [
+    write_hinting_page(before_path, after_path, Path("hinting-diff"))
+    for before_path, after_path in font_match.pairs
+]
+index_path = write_index_page(page_paths, Path("hinting-diff"))
+print(index_path)  # hinting-diff/index.html
 ```
 
-Unlike the command, it doesn't check that the fonts exist first: a missing or
-broken font raises fontTools' or Python's own error (e.g. `FileNotFoundError`),
-and a font with too many glyphs to map to Private Use Area codepoints raises a
-`ValueError`.
+- `match_fonts(before_paths, after_paths)` takes the old and the new fonts, each
+  as fonts or folders of fonts, and returns a `FontMatch` named tuple:
+  - `pairs`: a list of `(old font, new font)` with the same file name, in file
+    name order.
+  - `only_before`: old fonts without a new font with the same file name.
+  - `only_after`: new fonts without an old font with the same file name.
+
+  A single old font and a single new font, given on their own, are paired
+  whatever their names. It raises a `FileNotFoundError` for a path that doesn't
+  exist, and a `ValueError` for a folder without TrueType fonts or for two old or
+  two new fonts with the same file name.
+- `find_fonts(paths)` returns the fonts in a list of paths, as `match_fonts()`
+  finds them: fonts as they are, and every TrueType font (`.ttf`, in any case) in
+  folders and their subfolders, in file name order.
+- `write_index_page(page_paths, output_path, page_name="index.html")` writes the
+  index page in `output_path` and returns its path. Its links are relative, so the
+  pages can be in other folders too.
+
+### Reading fonts from a commit
+
+`save_fonts_at_commit(paths, commit, output_path)` saves the fonts in `paths`, as
+they were at `commit`, in `output_path`, and returns their paths there, to give
+to `match_fonts()` as the old fonts:
+
+```python
+import tempfile
+from pathlib import Path
+
+from hinting_diff import match_fonts, save_fonts_at_commit
+
+fonts_path = Path("fonts/ttf")
+with tempfile.TemporaryDirectory() as temp_folder:
+    before_paths = save_fonts_at_commit([fonts_path], "HEAD~1", Path(temp_folder))
+    font_match = match_fonts(before_paths, [fonts_path])
+    ...  # Write the pages before the temporary folder is deleted
+```
+
+Each path is a font or a folder of fonts in a git repository. For a folder, every
+TrueType font that was in it, or its subfolders, at the commit is saved. A font
+that wasn't in the commit isn't saved. It raises a `ValueError` if a path isn't in
+a git repository or the commit doesn't exist, and a `FileNotFoundError` for a path
+that doesn't exist.
 
 ### Lower-level functions
 
@@ -189,6 +301,13 @@ for how to set up the project and make a change. Please report security
 problems privately, as the
 [security policy](https://github.com/klim-type-foundry/hinting-diff/blob/main/SECURITY.md)
 explains.
+
+## Acknowledgements
+
+The page's look and its **old**/**new** toggle follow the HTML pages of
+[diffenator2](https://github.com/googlefonts/diffenator2) (Copyright Google LLC,
+Apache License 2.0), so a hinting page fits in with them in a report. Its styles
+are adapted from diffenator2's.
 
 ## Licence
 

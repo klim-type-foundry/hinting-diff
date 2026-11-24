@@ -9,7 +9,10 @@
    only refines a layout that works without it */
 @font-face { font-family: "hinting-old"; src: url("{{before_font}}"); }
 @font-face { font-family: "hinting-new"; src: url("{{after_font}}"); }
-/* The look of diffenator2's pages, so the page fits in with them in a report */
+/* The look of diffenator2's pages, so the page fits in with them in a report.
+   These styles are adapted from diffenator2's templates/_base.html
+   (https://github.com/googlefonts/diffenator2), Copyright Google LLC, licensed
+   under the Apache License 2.0 */
 html { font-family: sans-serif; }
 body { font-family: Helvetica; }
 #nav { position: fixed; right: 20px; z-index: 100; }
@@ -21,7 +24,7 @@ body { font-family: Helvetica; }
 .nav-item[hidden] { display: none; }
 .nav-item select, .nav-item input { background-color: black; color: white;
   font-size: 9pt; }
-.nav-item input { width: 7em; border: 1px solid white; }
+#filter { width: 7em; border: 1px solid white; }
 .box-title { width: 100%; font-size: 8pt; font-weight: 700;
   border-top: 1px solid black; padding-top: 5px; margin-bottom: 10pt;
   display: block; }
@@ -37,6 +40,13 @@ body { font-family: Helvetica; }
 @supports (overflow-wrap: anywhere) {
   #text-sample { word-break: normal; overflow-wrap: anywhere; }
 }
+/* One line for each size, cut off at the right rather than wrapped */
+#text-waterfall { margin-right: 150px; }
+.text-line { display: -ms-flexbox; display: flex; -ms-flex-align: baseline;
+  align-items: baseline; }
+.text-line .size-label { -ms-flex: none; flex: none; width: 3em; }
+.text-line .box-text { -ms-flex: 1 1 0%; flex: 1 1 0%; min-width: 0;
+  overflow: hidden; }
 .font-old { font-family: "hinting-old"; }
 .font-new { font-family: "hinting-new"; }
 .missing { font-size: 8pt; color: #888; }
@@ -70,6 +80,17 @@ body { font-family: Helvetica; }
 <label for="ppem">Font Size:</label>
 <select id="ppem"></select>
 </div>
+<div class="nav-item">
+<label for="text-choice">Text:</label>
+<select id="text-choice">
+<option value="all">All characters</option>
+<option value="basic">Basic Latin</option>
+<option value="custom">Custom</option>
+</select>
+</div>
+<div class="nav-item">
+<label><input type="checkbox" id="text-waterfall-toggle"> Text waterfall</label>
+</div>
 <div class="nav-item" id="instance-item" hidden>
 <label for="instance">Instance:</label>
 <select id="instance"></select>
@@ -87,6 +108,7 @@ hinting on Windows, so open this page on Windows to inspect it.</p>
 <div class="box-title" id="text-title"></div>
 <div contenteditable="true" spellcheck="false" class="box-text sample"
   id="text-sample"></div>
+<div id="text-waterfall" hidden></div>
 </div>
 <div class="box" id="waterfall" hidden>
 <div class="box-title" id="waterfall-title"></div>
@@ -109,6 +131,9 @@ var ppemSelect = document.getElementById("ppem");
 var instanceSelect = document.getElementById("instance");
 var filterInput = document.getElementById("filter");
 var textSample = document.getElementById("text-sample");
+var textChoiceSelect = document.getElementById("text-choice");
+var textWaterfallToggle = document.getElementById("text-waterfall-toggle");
+var textWaterfallDiv = document.getElementById("text-waterfall");
 var glyphsDiv = document.getElementById("glyphs");
 var glyphSizeStyle = document.getElementById("glyph-size-style");
 var WATERFALL_SIZES = [];
@@ -122,8 +147,13 @@ var SETTINGS_KEY = "hinting-diff";
 // them shows what changed
 var font = "old";
 var selectedGlyph = null;
-// The sample text, if it's been edited
+// The sample text: every character the font encodes ("all"), Basic Latin
+// ("basic"), or the text as it's been edited ("custom")
+var TEXT_CHOICES = ["all", "basic", "custom"];
+var textChoice = "all";
 var editedText = null;
+// The sample text at each size, rather than at the font size
+var textWaterfall = false;
 
 function indexWhere(items, test) {
   for (var i = 0; i < items.length; i++) {
@@ -149,6 +179,36 @@ function codepointString(codepoint) {
   if (codepoint <= 0xffff) return String.fromCharCode(codepoint);
   var offset = codepoint - 0x10000;
   return String.fromCharCode(0xd800 + (offset >> 10), 0xdc00 + (offset & 0x3ff));
+}
+
+// Basic Latin's letters, figures and punctuation, in groups, without the ones the
+// font doesn't encode, which would be shown in another font
+function basicText() {
+  var ranges = [
+    [[0x41, 0x5a]],
+    [[0x61, 0x7a]],
+    [[0x30, 0x39]],
+    [[0x21, 0x2f], [0x3a, 0x40], [0x5b, 0x60], [0x7b, 0x7e]]
+  ];
+  return ranges
+    .map(function (group) {
+      var chars = "";
+      group.forEach(function (range) {
+        for (var codepoint = range[0]; codepoint <= range[1]; codepoint++) {
+          var char = String.fromCharCode(codepoint);
+          if (DATA.sampleText.indexOf(char) >= 0) chars += char;
+        }
+      });
+      return chars;
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+var BASIC_TEXT = basicText();
+
+function sampleText() {
+  if (textChoice === "custom" && editedText !== null) return editedText;
+  return textChoice === "basic" ? BASIC_TEXT : DATA.sampleText;
 }
 
 function setHidden(element, hidden) {
@@ -187,6 +247,13 @@ function loadSettings() {
   if (settings.font === "old" || settings.font === "new") font = settings.font;
   if (typeof settings.filter === "string") filterInput.value = settings.filter;
   if (typeof settings.text === "string") editedText = settings.text;
+  if (TEXT_CHOICES.indexOf(settings.textChoice) >= 0) {
+    textChoice = settings.textChoice;
+  } else if (editedText !== null) {
+    // Settings from before the text could be chosen
+    textChoice = "custom";
+  }
+  textWaterfall = settings.textWaterfall === true;
   var index = indexWhere(DATA.glyphs, function (g) {
     return g.name === settings.glyph;
   });
@@ -199,6 +266,8 @@ function saveSettings() {
     font: font,
     filter: filterInput.value,
     text: editedText,
+    textChoice: textChoice,
+    textWaterfall: textWaterfall,
     glyph: selectedGlyph ? selectedGlyph.name : null
   };
   try {
@@ -207,7 +276,9 @@ function saveSettings() {
 }
 
 loadSettings();
-textSample.textContent = editedText === null ? DATA.sampleText : editedText;
+textChoiceSelect.value = textChoice;
+textWaterfallToggle.checked = textWaterfall;
+textSample.textContent = sampleText();
 
 // The value of a parameter in the URL's fragment, e.g. "style" in "#style=Bold"
 function hashParam(name) {
@@ -294,12 +365,15 @@ function title(parts) {
     .join(" ");
 }
 
+var WATERFALL_RANGE =
+  WATERFALL_SIZES[0] + "–" + WATERFALL_SIZES[WATERFALL_SIZES.length - 1] + " ppem";
+
 function renderWaterfall() {
   setHidden(document.getElementById("waterfall"), !selectedGlyph);
   if (!selectedGlyph) return;
   document.getElementById("waterfall-title").textContent = title([
     selectedGlyph.name,
-    WATERFALL_SIZES[0] + "–" + WATERFALL_SIZES[WATERFALL_SIZES.length - 1] + " ppem"
+    WATERFALL_RANGE
   ]);
   setChildren(
     document.getElementById("waterfall-samples"),
@@ -311,6 +385,51 @@ function renderWaterfall() {
       cell.appendChild(glyphSample(selectedGlyph, ppem));
       cell.appendChild(label);
       return cell;
+    })
+  );
+}
+
+// The sample text's elements that can be edited, which all show the same text
+function textElements() {
+  var elements = [textSample];
+  var lines = textWaterfallDiv.getElementsByTagName("div");
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].className.indexOf("box-text") >= 0) elements.push(lines[i]);
+  }
+  return elements;
+}
+
+function renderText() {
+  var ppem = Number(ppemSelect.value);
+  document.getElementById("text-title").textContent =
+    title([textWaterfall ? WATERFALL_RANGE : ppem + " ppem"]) +
+    " (click the text to edit it)";
+  setHidden(textSample, textWaterfall);
+  setHidden(textWaterfallDiv, !textWaterfall);
+  styleSample(textSample, ppem);
+  if (!textWaterfall) {
+    removeChildren(textWaterfallDiv);
+    return;
+  }
+  var text = sampleText();
+  setChildren(
+    textWaterfallDiv,
+    WATERFALL_SIZES.map(function (size) {
+      var line = document.createElement("div");
+      line.className = "text-line";
+      var label = document.createElement("span");
+      label.className = "size-label";
+      label.textContent = String(size);
+      var sample = document.createElement("div");
+      sample.className = "box-text sample";
+      sample.contentEditable = "true";
+      sample.spellcheck = false;
+      sample.textContent = text;
+      styleSample(sample, size);
+      listenForEdits(sample);
+      line.appendChild(label);
+      line.appendChild(sample);
+      return line;
     })
   );
 }
@@ -364,8 +483,7 @@ function renderGlyphs() {
 function render() {
   var ppem = Number(ppemSelect.value);
   fontToggle.textContent = font;
-  document.getElementById("text-title").textContent = title([ppem + " ppem"]);
-  styleSample(textSample, ppem);
+  renderText();
   renderWaterfall();
   renderGlyphs();
 }
@@ -375,12 +493,30 @@ function change() {
   render();
 }
 
-function textChanged() {
-  if (textSample.textContent === (editedText === null ? DATA.sampleText : editedText)) {
-    return;
-  }
-  editedText = textSample.textContent;
+// Editing the text at one size changes it at the others, and makes it the custom
+// text
+function textChanged(element) {
+  var text = element.textContent;
+  if (text === sampleText()) return;
+  editedText = text;
+  textChoice = "custom";
+  textChoiceSelect.value = textChoice;
+  textElements().forEach(function (other) {
+    if (other !== element) other.textContent = text;
+  });
   saveSettings();
+}
+
+// Internet Explorer doesn't send "input" events for editable elements
+function listenForEdits(element) {
+  ["input", "keyup", "blur", "paste", "cut"].forEach(function (type) {
+    element.addEventListener(type, function () {
+      // After a paste or cut has changed the text
+      setTimeout(function () {
+        textChanged(element);
+      }, 0);
+    });
+  });
 }
 
 fontToggle.addEventListener("click", function () {
@@ -403,12 +539,21 @@ var lastFilter = filterInput.value;
     filterChanged();
   });
 });
-// Internet Explorer doesn't send "input" events for editable elements
-["input", "keyup", "blur", "paste", "cut"].forEach(function (type) {
-  textSample.addEventListener(type, function () {
-    // After a paste or cut has changed the text
-    setTimeout(textChanged, 0);
-  });
+listenForEdits(textSample);
+textChoiceSelect.addEventListener("change", function () {
+  // The custom text starts as the text that's shown
+  if (textChoiceSelect.value === "custom" && editedText === null) {
+    editedText = sampleText();
+  }
+  textChoice = textChoiceSelect.value;
+  textSample.textContent = sampleText();
+  saveSettings();
+  renderText();
+});
+textWaterfallToggle.addEventListener("click", function () {
+  textWaterfall = textWaterfallToggle.checked;
+  saveSettings();
+  renderText();
 });
 // The pixel ratio changes with the browser's zoom, which resizes the window
 window.addEventListener("resize", render);

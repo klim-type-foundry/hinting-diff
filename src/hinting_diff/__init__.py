@@ -1,11 +1,14 @@
 from importlib.metadata import PackageNotFoundError, version
 
+from hinting_diff.git import save_fonts_at_commit
+from hinting_diff.matching import FontMatch, find_fonts, match_fonts
 from hinting_diff.page import (
     GLYPH_CODEPOINT_START,
     add_glyph_codepoints,
     get_named_instances,
     get_sample_text,
     write_hinting_page,
+    write_index_page,
 )
 
 try:
@@ -18,9 +21,14 @@ finally:
 
 __all__ = [
     "GLYPH_CODEPOINT_START",
+    "FontMatch",
     "__version__",
     "add_glyph_codepoints",
+    "find_fonts",
     "get_named_instances",
     "get_sample_text",
+    "match_fonts",
+    "save_fonts_at_commit",
     "write_hinting_page",
+    "write_index_page",
 ]
