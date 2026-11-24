@@ -190,6 +190,13 @@ problems privately, as the
 [security policy](https://github.com/klim-type-foundry/hinting-diff/blob/main/SECURITY.md)
 explains.
 
+## Acknowledgements
+
+The page's look and its **old**/**new** toggle follow the HTML pages of
+[diffenator2](https://github.com/googlefonts/diffenator2) (Copyright Google LLC,
+Apache License 2.0), so a hinting page fits in with them in a report. Its styles
+are adapted from diffenator2's.
+
 ## Licence
 
 [Apache License 2.0](https://github.com/klim-type-foundry/hinting-diff/blob/main/LICENSE.txt)
