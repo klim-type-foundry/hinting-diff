@@ -66,14 +66,18 @@ options:
 usage: 
   hinting-diff [-h] [-o OUT] [--version] BEFORE AFTER
   hinting-diff [-h] [-o OUT] [--version] -fb FONT [FONT ...] -fa FONT [FONT ...]
+  hinting-diff [-h] [-o OUT] [--version] AFTER [AFTER ...] --commit [REF]
 
 Write pages to compare the TrueType hinting of two versions of fonts. Give the
 old and new font, or folders of them, or several fonts with -fb and -fa: fonts
-are matched by their file names. Browsers only apply TrueType hinting on
-Windows, so open the pages on Windows.
+are matched by their file names. Or give the new fonts, or folders of them, in
+a git repository, with --commit to compare them with the fonts at the same
+paths in a commit. Browsers only apply TrueType hinting on Windows, so open
+the pages on Windows.
 
 positional arguments:
-  BEFORE AFTER          the old and the new font (TTF), or folders of fonts
+  BEFORE AFTER          the old and the new font (TTF), or folders of fonts.
+                        With --commit, the new fonts or folders
 
 options:
   -h, --help            show this help message and exit
@@ -81,6 +85,9 @@ options:
                         the old fonts (TTF), or folders of fonts
   -fa FONT [FONT ...], --fonts-after FONT [FONT ...]
                         the new fonts (TTF), or folders of fonts
+  --commit [REF]        compare the new fonts with the fonts at the same paths
+                        in this commit, e.g. HEAD~1 or a tag (default: HEAD,
+                        the last commit)
   -o OUT, --out OUT, --output OUT
                         folder for the pages and copies of the fonts (default:
                         hinting-diff)
@@ -105,6 +112,29 @@ same tab.
 Sizes are in device pixels, so they stay the same with browser zoom or display
 scaling (e.g. 150% in Windows), which change how many device pixels a CSS pixel
 is.
+
+### Comparing with a commit
+
+In a git repository, give only the new fonts, or folders of them, with
+`--commit` to compare them with the fonts at the same paths in a commit:
+
+```shell
+hinting-diff fonts/ttf/ --commit
+hinting-diff fonts/ttf/*.ttf --commit HEAD~1
+hinting-diff fonts/ttf/Family-Regular.ttf --commit v1.2.0
+```
+
+By default, the fonts are compared with the last commit (`HEAD`), e.g. to check
+fonts you've just built before committing them. Give another commit, e.g.
+`HEAD~1`, a branch, a tag or a commit hash, to compare with that. Put `--commit`
+after the fonts, or give its commit, as in `--commit HEAD fonts/ttf/`: otherwise
+the fonts' path is taken as the commit.
+
+A font that wasn't in the commit, or one in a folder that was in the commit but
+isn't now, is skipped, with a warning. The old fonts are read from the local
+repository, so `git` needs to be installed, and the commit needs to be there,
+e.g. `git fetch` first for `origin/main`. Fonts in
+[Git LFS](https://git-lfs.com) work too, if `git lfs` is installed.
 
 ### Showing the page in a report
 
@@ -190,6 +220,31 @@ print(index_path)  # hinting-diff/index.html
 - `write_index_page(page_paths, output_path, page_name="index.html")` writes the
   index page in `output_path` and returns its path. Its links are relative, so the
   pages can be in other folders too.
+
+### Reading fonts from a commit
+
+`save_fonts_at_commit(paths, commit, output_path)` saves the fonts in `paths`, as
+they were at `commit`, in `output_path`, and returns their paths there, to give
+to `match_fonts()` as the old fonts:
+
+```python
+import tempfile
+from pathlib import Path
+
+from hinting_diff import match_fonts, save_fonts_at_commit
+
+fonts_path = Path("fonts/ttf")
+with tempfile.TemporaryDirectory() as temp_folder:
+    before_paths = save_fonts_at_commit([fonts_path], "HEAD~1", Path(temp_folder))
+    font_match = match_fonts(before_paths, [fonts_path])
+    ...  # Write the pages before the temporary folder is deleted
+```
+
+Each path is a font or a folder of fonts in a git repository. For a folder, every
+TrueType font that was in it, or its subfolders, at the commit is saved. A font
+that wasn't in the commit isn't saved. It raises a `ValueError` if a path isn't in
+a git repository or the commit doesn't exist, and a `FileNotFoundError` for a path
+that doesn't exist.
 
 ### Lower-level functions
 
