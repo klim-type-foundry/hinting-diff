@@ -5,6 +5,7 @@ browser.
 
 import html
 import json
+import os
 import unicodedata
 import urllib.parse
 from importlib import resources
@@ -153,3 +154,65 @@ def write_hinting_page(
         encoding="utf-8",
     )
     return page_path
+
+
+_INDEX_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hinting</title>
+<style>
+/* The look of the hinting pages (see page.html) */
+html {{ font-family: sans-serif; }}
+body {{ font-family: Helvetica; }}
+.box-title {{ width: 100%; font-size: 8pt; font-weight: 700;
+  border-top: 1px solid black; padding-top: 5px; margin-bottom: 10pt;
+  display: block; }}
+.warning {{ font-size: 9pt; }}
+ul {{ padding: 0; list-style: none; }}
+li {{ margin-bottom: 4pt; }}
+a {{ color: black; }}
+</style>
+</head>
+<body>
+<h2><b>Hinting</b></h2>
+<p class="warning">Browsers only apply TrueType hinting on Windows, so open these
+pages on Windows to inspect it. Open them in the same tab to keep the same settings
+on each page.</p>
+<div class="box-title">{count}</div>
+<ul>
+{links}
+</ul>
+</body>
+</html>
+"""
+
+
+def write_index_page(
+    page_paths: list[Path], output_path: Path, page_name: str = "index.html"
+) -> Path:
+    """
+    Writes a page that links to hinting pages, e.g. one for each font of a family,
+    in `output_path`, named `page_name`. Returns the page's path.
+    """
+    output_path.mkdir(parents=True, exist_ok=True)
+    index_path = output_path.joinpath(page_name)
+    links = "\n".join(
+        '<li><a href="{href}">{name}</a></li>'.format(
+            href=html.escape(
+                urllib.parse.quote(
+                    Path(os.path.relpath(page_path, output_path)).as_posix()
+                )
+            ),
+            name=html.escape(page_path.stem.removesuffix("-hinting")),
+        )
+        for page_path in page_paths
+    )
+    index_path.write_text(
+        _INDEX_TEMPLATE.format(
+            count=f"{len(page_paths)} font{'' if len(page_paths) == 1 else 's'}",
+            links=links,
+        ),
+        encoding="utf-8",
+    )
+    return index_path

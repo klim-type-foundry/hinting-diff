@@ -11,6 +11,7 @@ from hinting_diff import (
     get_named_instances,
     get_sample_text,
     write_hinting_page,
+    write_index_page,
 )
 from tests.conftest import GLYPH_ORDER
 
@@ -173,3 +174,31 @@ def test_page_script_works_in_old_browsers(font_path, tmp_path):
         name for name, pattern in UNSUPPORTED_SCRIPT.items() if re.search(pattern, code)
     ]
     assert found == []
+
+
+def test_write_index_page(font_factory, tmp_path):
+    output_path = tmp_path.joinpath("output")
+    page_paths = [
+        write_hinting_page(font_path, font_path, output_path)
+        for font_path in (
+            font_factory("Test-Regular.ttf"),
+            font_factory('A<b>&" #1.ttf'),
+        )
+    ]
+    # Pages can be in other folders too
+    other_path = font_factory("Test-Other.ttf")
+    page_paths.append(write_hinting_page(other_path, other_path, tmp_path / "other"))
+
+    index_path = write_index_page(page_paths, output_path)
+
+    assert index_path == output_path.joinpath("index.html")
+    index = index_path.read_text()
+    assert '<div class="box-title">3 fonts</div>' in index
+    assert '<li><a href="Test-Regular-hinting.html">Test-Regular</a></li>' in index
+    assert (
+        '<li><a href="A%3Cb%3E%26%22%20%231-hinting.html">A&lt;b&gt;&amp;&quot; #1</a>'
+        in index
+    )
+    assert '<a href="../other/Test-Other-hinting.html">' in index
+    one_path = write_index_page(page_paths[:1], output_path, "one.html")
+    assert '<div class="box-title">1 font</div>' in one_path.read_text()

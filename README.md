@@ -5,12 +5,14 @@
 [![Checks](https://github.com/klim-type-foundry/hinting-diff/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/klim-type-foundry/hinting-diff/actions/workflows/check.yml)
 [![Licence](https://img.shields.io/pypi/l/hinting-diff)](https://github.com/klim-type-foundry/hinting-diff/blob/main/LICENSE.txt)
 
-Compare the TrueType hinting of two versions of a font in a browser.
+Compare the TrueType hinting of two versions of a font, or a family of fonts,
+in a browser.
 
 `hinting-diff` writes an HTML page that shows every glyph of a font, encoded or
 not, rendered with its hinting at a size in pixels per em (ppem), for the old
 and the new version of the font. Click **old**/**new** to switch between them
-and see what changed.
+and see what changed. For a family, it writes a page for each font, and an index
+page that links to them.
 
 ![A waterfall of the letter "a" from 8 to 19 ppem, switching between the old, unhinted font, whose small sizes are blurry and uneven, and the new, hinted font, whose small sizes are sharper and more even](https://raw.githubusercontent.com/klim-type-foundry/hinting-diff/main/docs/hinting-diff.webp)
 
@@ -39,23 +41,48 @@ hinting-diff old/Family-Regular.ttf new/Family-Regular.ttf -o hinting-diff/
 This writes `hinting-diff/Family-Regular-hinting.html`, with copies of both
 fonts next to it, and prints the page's path. Open it in a browser on Windows.
 
+To compare a family, give the folders of the old and the new fonts, or the fonts
+with `-fb`/`--fonts-before` and `-fa`/`--fonts-after`, as in
+[diffenator2](https://github.com/googlefonts/diffenator2):
+
+```shell
+hinting-diff old/ new/
+hinting-diff -fb old/*.ttf -fa new/*.ttf
+```
+
+Fonts are matched by their file names, and folders' subfolders are searched too.
+A font that's only in the old or only in the new fonts is skipped, with a
+warning. This writes a page for each font, and an `index.html` page that links
+to them, and prints their paths, with the index page last. A single old font and
+a single new font, given on their own, are compared whatever their names.
+
+If a font can't be read, the other fonts' pages are still written, and the
+command exits with an error.
+
 The output folder is optional, and is `hinting-diff` by default. All the
 options:
 
 ```text
-usage: hinting-diff [-h] [-o OUTPUT] [--version] before after
+usage: 
+  hinting-diff [-h] [-o OUT] [--version] BEFORE AFTER
+  hinting-diff [-h] [-o OUT] [--version] -fb FONT [FONT ...] -fa FONT [FONT ...]
 
-Write a page to compare the TrueType hinting of two versions of a font.
-Browsers only apply TrueType hinting on Windows, so open the page on Windows.
+Write pages to compare the TrueType hinting of two versions of fonts. Give the
+old and new font, or folders of them, or several fonts with -fb and -fa: fonts
+are matched by their file names. Browsers only apply TrueType hinting on
+Windows, so open the pages on Windows.
 
 positional arguments:
-  before                the old font (TTF)
-  after                 the new font (TTF)
+  BEFORE AFTER          the old and the new font (TTF), or folders of fonts
 
 options:
   -h, --help            show this help message and exit
-  -o OUTPUT, --output OUTPUT
-                        folder for the page and copies of the fonts (default:
+  -fb FONT [FONT ...], --fonts-before FONT [FONT ...]
+                        the old fonts (TTF), or folders of fonts
+  -fa FONT [FONT ...], --fonts-after FONT [FONT ...]
+                        the new fonts (TTF), or folders of fonts
+  -o OUT, --out OUT, --output OUT
+                        folder for the pages and copies of the fonts (default:
                         hinting-diff)
   --version             show program's version number and exit
 ```
@@ -93,7 +120,7 @@ pages as part of a bigger report.
 
 ### Writing a page
 
-`write_hinting_page()` does the same as the `hinting-diff` command:
+`write_hinting_page()` writes the page for one font:
 
 ```python
 from pathlib import Path
@@ -119,23 +146,50 @@ Its arguments are:
 
 It returns the page's path. The copies of the fonts are saved next to the page as
 `hinting-old-<new font's file name>` and `hinting-new-<new font's file name>`, so
-pages for several fonts can share a folder:
+pages for several fonts can share a folder.
+
+It doesn't check that the fonts exist first: a missing or broken font raises
+fontTools' or Python's own error (e.g. `FileNotFoundError`), and a font with too
+many glyphs to map to Private Use Area codepoints raises a `ValueError`.
+
+### Writing pages for a family
+
+`match_fonts()` matches old and new fonts by their file names, as the command
+does, and `write_index_page()` writes a page that links to hinting pages:
 
 ```python
 from pathlib import Path
 
-from hinting_diff import write_hinting_page
+from hinting_diff import match_fonts, write_hinting_page, write_index_page
 
-for after_path in sorted(Path("new").glob("*.ttf")):
-    before_path = Path("old", after_path.name)
-    if before_path.is_file():
-        write_hinting_page(before_path, after_path, Path("hinting-diff"))
+font_match = match_fonts([Path("old")], [Path("new")])
+for after_path in font_match.only_after:
+    print(f"{after_path.name} is new")
+page_paths = [
+    write_hinting_page(before_path, after_path, Path("hinting-diff"))
+    for before_path, after_path in font_match.pairs
+]
+index_path = write_index_page(page_paths, Path("hinting-diff"))
+print(index_path)  # hinting-diff/index.html
 ```
 
-Unlike the command, it doesn't check that the fonts exist first: a missing or
-broken font raises fontTools' or Python's own error (e.g. `FileNotFoundError`),
-and a font with too many glyphs to map to Private Use Area codepoints raises a
-`ValueError`.
+- `match_fonts(before_paths, after_paths)` takes the old and the new fonts, each
+  as fonts or folders of fonts, and returns a `FontMatch` named tuple:
+  - `pairs`: a list of `(old font, new font)` with the same file name, in file
+    name order.
+  - `only_before`: old fonts without a new font with the same file name.
+  - `only_after`: new fonts without an old font with the same file name.
+
+  A single old font and a single new font, given on their own, are paired
+  whatever their names. It raises a `FileNotFoundError` for a path that doesn't
+  exist, and a `ValueError` for a folder without TrueType fonts or for two old or
+  two new fonts with the same file name.
+- `find_fonts(paths)` returns the fonts in a list of paths, as `match_fonts()`
+  finds them: fonts as they are, and every TrueType font (`.ttf`, in any case) in
+  folders and their subfolders, in file name order.
+- `write_index_page(page_paths, output_path, page_name="index.html")` writes the
+  index page in `output_path` and returns its path. Its links are relative, so the
+  pages can be in other folders too.
 
 ### Lower-level functions
 
