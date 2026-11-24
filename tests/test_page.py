@@ -202,3 +202,14 @@ def test_write_index_page(font_factory, tmp_path):
     assert '<a href="../other/Test-Other-hinting.html">' in index
     one_path = write_index_page(page_paths[:1], output_path, "one.html")
     assert '<div class="box-title">1 font</div>' in one_path.read_text()
+
+
+def test_page_text_controls(font_path, tmp_path):
+    page = write_hinting_page(font_path, font_path, tmp_path).read_text()
+    # The sample text can be every character, Basic Latin or custom text, at the
+    # font size or as a waterfall
+    choices = re.findall(r'<option value="(\w+)">', page)
+    assert choices == ["all", "basic", "custom"]
+    assert 'var TEXT_CHOICES = ["all", "basic", "custom"];' in page
+    assert '<input type="checkbox" id="text-waterfall-toggle">' in page
+    assert '<div id="text-waterfall" hidden></div>' in page

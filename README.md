@@ -98,14 +98,17 @@ The page has:
 
 - **Sample text**, which starts as every character the new font encodes
   (without combining marks or spaces), for a quick look over the whole character
-  set. You can edit it.
+  set. Choose **Basic Latin** in the **Text** menu for its letters, figures and
+  punctuation, or edit the text to use your own (**Custom**). Tick **Text
+  waterfall** to show the text from 8 to 64 ppem, one line for each size, cut off
+  at the right: editing the text at one size changes it at the others.
 - **Every glyph**, at the **Font Size** you choose (48 ppem to start with).
   Hover over a glyph to see its name, or filter the glyphs by name. Glyphs that
   are only in one of the fonts say so.
 - **A waterfall** of a glyph from 8 to 64 ppem: click a glyph to show it.
 - For variable fonts, an **Instance** menu with the font's named instances.
 
-The size, font, filter, selected glyph and edited text are kept for the browser
+The size, font, text, filter and selected glyph are kept for the browser
 tab's session, so they stay the same when you open another font's page in the
 same tab.
 
