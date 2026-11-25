@@ -1,0 +1,57 @@
+# Runs the reusable screenshots workflow (screenshots.yml) on Windows with this
+# repository's own package, on two test fonts: the new one has a glyph removed, so
+# its glyphs' screenshot changes and its sample text's doesn't. The fonts are made
+# by tests/conftest.py's build_font().
+name: Check screenshots workflow
+on:
+  pull_request:
+    paths:
+      - .github/workflows/screenshots.yml
+      - .github/workflows/check-screenshots.yml
+      - src/**
+      - tests/workflow-fonts/**
+      - pyproject.toml
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/screenshots.yml
+      - .github/workflows/check-screenshots.yml
+      - src/**
+      - tests/workflow-fonts/**
+      - pyproject.toml
+  workflow_dispatch:
+
+concurrency:
+  group: ci-check-screenshots-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    name: 'Screenshots workflow'
+    uses: ./.github/workflows/screenshots.yml
+    with:
+      fonts-before: tests/workflow-fonts/old
+      fonts: tests/workflow-fonts/new
+      artifact-name: check-screenshots
+      # This checkout's package, rather than the released one
+      package: '.[screenshot]'
+
+  check:
+    name: 'Screenshots workflow: check the result'
+    needs: screenshots
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that only the glyphs changed
+        env:
+          CHANGED: ${{ needs.screenshots.outputs.changed }}
+          ARTIFACT_URL: ${{ needs.screenshots.outputs.artifact-url }}
+        run: |
+          echo "Changed: $CHANGED, artifact: $ARTIFACT_URL"
+          if [ "$CHANGED" != "1" ] || [ -z "$ARTIFACT_URL" ]; then
+            echo "::error::Expected 1 changed screenshot and an artifact"
+            exit 1
+          fi

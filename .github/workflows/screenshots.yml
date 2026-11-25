@@ -1,0 +1,181 @@
+# A reusable workflow that takes screenshots of fonts' hinting on Windows, with
+# `hinting-diff --screenshot`, for other repositories to call, e.g. on a pull
+# request:
+#
+#   jobs:
+#     hinting:
+#       uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.0
+#       with:
+#         fonts: fonts/ttf
+#
+# It compares the fonts with the same fonts in the pull request's base commit (or
+# in `commit`, or with the fonts in `fonts-before`), uploads the pages and
+# screenshots as an artifact, and lists the screenshots that changed in the job
+# summary. See the README's "Screenshots in GitHub Actions".
+name: Hinting screenshots
+on:
+  workflow_call:
+    inputs:
+      fonts:
+        description: The new fonts (TTF), or folders of them, separated by spaces
+        required: true
+        type: string
+      fonts-before:
+        description: >-
+          The old fonts, or folders of them, separated by spaces, to compare with
+          rather than the fonts in a commit
+        required: false
+        type: string
+        default: ''
+      commit:
+        description: >-
+          The commit to compare the fonts with (default: the pull request's base
+          commit)
+        required: false
+        type: string
+        default: ''
+      sizes:
+        description: Sizes of the sample text's waterfall, in ppem, e.g. 9-24
+        required: false
+        type: string
+        default: '9-24'
+      ppem:
+        description: Sizes of the glyphs, in ppem, separated by spaces, e.g. 12 16
+        required: false
+        type: string
+        default: '16'
+      text:
+        description: >-
+          The sample text: "all" (every character the new fonts encode), "basic"
+          (Basic Latin) or your own text
+        required: false
+        type: string
+        default: 'basic'
+      lfs:
+        description: Whether to download Git LFS files, for fonts stored in Git LFS
+        required: false
+        type: boolean
+        default: false
+      artifact-name:
+        description: The name of the artifact with the pages and screenshots
+        required: false
+        type: string
+        default: 'hinting-screenshots'
+      package:
+        description: >-
+          The hinting-diff package to install, as a pip requirement (default: the
+          release this workflow is from)
+        required: false
+        type: string
+        # The release this workflow is from: tests/test_workflow.py checks that it
+        # matches VERSION
+        default: 'hinting-diff[screenshot]==0.3.0'
+    outputs:
+      artifact-url:
+        description: The URL of the artifact with the pages and screenshots
+        value: ${{ jobs.screenshots.outputs.artifact-url }}
+      changed:
+        description: The number of screenshots that changed
+        value: ${{ jobs.screenshots.outputs.changed }}
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    name: 'Hinting screenshots'
+    # Browsers only apply TrueType hinting on Windows
+    runs-on: windows-latest
+    outputs:
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+      changed: ${{ steps.summary.outputs.changed }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history, for the commit to compare with
+          fetch-depth: 0
+          lfs: ${{ inputs.lfs }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: '3.12'
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/hinting-diff-venv
+      # Edge is installed on Windows runners, so Playwright doesn't need a browser
+      - name: Install hinting-diff
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          uv pip install "$PACKAGE"
+
+      - name: Take screenshots
+        env:
+          FONTS: ${{ inputs.fonts }}
+          FONTS_BEFORE: ${{ inputs.fonts-before }}
+          COMMIT: ${{ inputs.commit || github.event.pull_request.base.sha }}
+          SIZES: ${{ inputs.sizes }}
+          PPEM: ${{ inputs.ppem }}
+          TEXT: ${{ inputs.text }}
+        run: |
+          read -ra fonts <<< "$FONTS"
+          read -ra fonts_before <<< "$FONTS_BEFORE"
+          read -ra ppems <<< "$PPEM"
+          options=(
+            -o "$RUNNER_TEMP/hinting-diff" --screenshot
+            --screenshot-sizes "$SIZES" --screenshot-ppem "${ppems[@]}"
+            --screenshot-text "$TEXT"
+          )
+          if [ "${#fonts_before[@]}" -gt 0 ]; then
+            hinting-diff -fb "${fonts_before[@]}" -fa "${fonts[@]}" "${options[@]}"
+          elif [ -n "$COMMIT" ]; then
+            hinting-diff "${fonts[@]}" --commit "$COMMIT" "${options[@]}"
+          else
+            echo "::error::Give fonts-before or commit, outside of a pull request"
+            exit 1
+          fi
+
+      # Even if some fonts' pages failed, the others' screenshots are uploaded
+      - name: Upload the pages and screenshots
+        id: upload
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/hinting-diff/
+          if-no-files-found: ignore
+
+      - name: List the screenshots that changed
+        id: summary
+        if: ${{ !cancelled() }}
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          python - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          list_path = Path(os.environ["RUNNER_TEMP"], "hinting-diff", "screenshots", "screenshots.json")
+          screenshots = json.loads(list_path.read_text()) if list_path.exists() else []
+          changed = [s for s in screenshots if s["changed"]]
+          lines = [
+              "## Hinting screenshots",
+              "",
+              f"{len(changed)} of {len(screenshots)} screenshots changed.",
+          ]
+          if os.environ.get("ARTIFACT_URL"):
+              lines.append(f"[Download the pages and screenshots]({os.environ['ARTIFACT_URL']}).")
+          if changed:
+              lines += ["", "| Font | Style | Screenshot |", "|---|---|---|"]
+              lines += [
+                  f"| {s['page'].removesuffix('-hinting.html')} | {s['style'] or ''} | `{s['new']}` |"
+                  for s in changed
+              ]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as file:
+              file.write("\n".join(lines) + "\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as file:
+              file.write(f"changed={len(changed)}\n")
+          EOF
