@@ -100,7 +100,8 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   # Create the GitHub release after publishing to PyPI, so a failed upload can be
-  # re-run without a release already existing for the version
+  # re-run without a release already existing for the version. This job can be
+  # re-run too: it does nothing if the release already exists.
   github-release:
     name: 'Release: create GitHub release'
     needs: [build, pypi]
@@ -116,11 +117,62 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
+          TAG="v$RELEASE_VERSION"
+
+          # Do nothing if the release already exists, so the job can be re-run
+          if IS_DRAFT="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$IS_DRAFT" = "true" ]; then
+              echo "::error::A draft release for $TAG already exists. Delete or publish it, then re-run this job."
+              exit 1
+            fi
+            echo "Release $TAG already exists"
+            exit 0
+          fi
+
+          # If the tag was pushed by hand (see below), create the release for it,
+          # as long as it points to the commit that triggered the workflow
+          if TAG_REF="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha' 2>/dev/null)"; then
+            read -r TAG_TYPE TAG_SHA <<< "$TAG_REF"
+            if [ "$TAG_TYPE" = "tag" ]; then
+              TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_SHA" --jq .object.sha)"
+            fi
+            if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::Tag $TAG points to $TAG_SHA, not to $GITHUB_SHA, which triggered this release"
+              exit 1
+            fi
+            gh release create "$TAG" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" \
+              --verify-tag \
+              --generate-notes
+            exit 0
+          fi
+
           # Tag the commit that triggered the workflow, rather than the latest
           # commit on `main`, which may already include later, unreleased changes
-          gh release create "v$RELEASE_VERSION" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "v$RELEASE_VERSION" \
-            --target "$GITHUB_SHA" \
-            --generate-notes
+          if gh release create "$TAG" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" \
+              --target "$GITHUB_SHA" \
+              --generate-notes; then
+            exit 0
+          fi
+
+          # GitHub doesn't let the workflow's token create a tag at a commit whose
+          # workflow files differ from the default branch's (the token can't have
+          # the `workflows` permission). That happens when a change to
+          # .github/workflows is merged after the release commit but before this
+          # job runs. Explain how to finish the release by hand.
+          CHANGED="$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$DEFAULT_BRANCH" \
+            --jq '[.files[]?.filename | select(startswith(".github/workflows/"))] | join(", ")' || true)"
+          if [ -n "$CHANGED" ]; then
+            echo "::error::Couldn't create tag $TAG, because $DEFAULT_BRANCH has changed these workflow files since $GITHUB_SHA: $CHANGED. The workflow's token isn't allowed to tag a commit with different workflow files. See the log for how to finish the release."
+            echo "To finish the release, push the tag yourself, then re-run this job:"
+            echo "  git fetch origin && git tag $TAG $GITHUB_SHA && git push origin $TAG"
+            echo "Or create the release by hand, with the files this run built:"
+            echo "  gh run download $GITHUB_RUN_ID --repo $GITHUB_REPOSITORY --name dist --dir dist"
+            echo "  gh release create $TAG dist/* --repo $GITHUB_REPOSITORY --title $TAG --target $GITHUB_SHA --generate-notes"
+          fi
+          exit 1

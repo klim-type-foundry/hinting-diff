@@ -81,6 +81,13 @@ The workflow publishes to PyPI with
 PyPI token to manage. PyPI only accepts uploads from `release.yml` in the
 `pypi` environment, which can only be used from `main`.
 
+If a change to `.github/workflows` is merged into `main` after the release
+commit but before the GitHub release is created, GitHub doesn't let the
+workflow tag the release commit, so the "create GitHub release" job fails. Its
+log shows how to finish the release: push the tag yourself and re-run the job,
+or create the release by hand. To avoid this, don't merge workflow changes
+(such as Dependabot's) while a release is running.
+
 ## Licence
 
 By contributing, you agree that your contributions are licensed under the
