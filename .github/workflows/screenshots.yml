@@ -4,7 +4,7 @@
 #
 #   jobs:
 #     hinting:
-#       uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.0
+#       uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.1
 #       with:
 #         fonts: fonts/ttf
 #
@@ -61,6 +61,13 @@ on:
         required: false
         type: string
         default: 'hinting-screenshots'
+      retention-days:
+        description: >-
+          Days to keep the artifact for (default: 0, the repository's setting,
+          which is 90 days unless it's changed)
+        required: false
+        type: number
+        default: 0
       package:
         description: >-
           The hinting-diff package to install, as a pip requirement (default: the
@@ -69,7 +76,7 @@ on:
         type: string
         # The release this workflow is from: tests/test_workflow.py checks that it
         # matches VERSION
-        default: 'hinting-diff[screenshot]==0.3.0'
+        default: 'hinting-diff[screenshot]==0.3.1'
     outputs:
       artifact-url:
         description: The URL of the artifact with the pages and screenshots
@@ -146,6 +153,7 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: ${{ runner.temp }}/hinting-diff/
           if-no-files-found: ignore
+          retention-days: ${{ inputs.retention-days }}
 
       - name: List the screenshots that changed
         id: summary
