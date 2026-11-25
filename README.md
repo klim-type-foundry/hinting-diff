@@ -110,7 +110,8 @@ The page has:
 
 The size, font, text, filter and selected glyph are kept for the browser
 tab's session, so they stay the same when you open another font's page in the
-same tab.
+same tab. They can be given in the page's URL too (see
+[Settings in the URL](#settings-in-the-url)).
 
 Sizes are in device pixels, so they stay the same with browser zoom or display
 scaling (e.g. 150% in Windows), which change how many device pixels a CSS pixel
@@ -139,12 +140,34 @@ repository, so `git` needs to be installed, and the commit needs to be there,
 e.g. `git fetch` first for `origin/main`. Fonts in
 [Git LFS](https://git-lfs.com) work too, if `git lfs` is installed.
 
-### Showing the page in a report
+### Settings in the URL
 
-A page that shows the hinting page in a frame can pick a variable font's
-instance by adding its name to the URL, e.g.
-`Family-Regular-hinting.html#style=Bold`. This hides the page's own
-**Instance** menu.
+The page's settings can be given in its URL, after a `#`, e.g.
+`Family-Regular-hinting.html#font=new&ppem=12&glyph=a`, to link to what you're
+looking at. They win over the settings kept for the browser tab's session, and
+only the settings given change: the others stay as they were.
+
+| Setting | Value |
+|---|---|
+| `style` | A variable font's instance, by its name, e.g. `Bold`. This hides the page's own **Instance** menu, so a page that shows the hinting page in a frame (e.g. a report) can pick the instance. |
+| `font` | `old` or `new` |
+| `ppem` | The **Font Size**, in ppem, e.g. `12` (8–64, 72 or 96) |
+| `text` | The sample text: `all` (every character), `basic` (Basic Latin) or `custom` |
+| `custom` | Your own sample text, e.g. `Hamburgefonstiv`, which makes it the sample text |
+| `waterfall` | `1` to show the sample text as a waterfall, `0` to show it at the font size |
+| `sizes` | The waterfalls' sizes, e.g. `9-24` (8–64 by default) |
+| `glyph` | The glyph shown in a waterfall, by its name, e.g. `a`, or nothing for none |
+| `filter` | The glyphs' filter, e.g. `.sc` |
+| `capture` | `1` to show only the samples, without the menus, the heading or the hints in the titles, for screenshots |
+
+Encode characters that have a meaning in URLs, e.g. `%20` for a space, `%2B`
+for `+` (a `+` is read as a space), `%26` for `&` and `%23` for `#`. Unlike the
+other settings, `sizes` and `capture` aren't kept for the session.
+
+Tools that take screenshots of the page can wait for the `data-ready` attribute
+on the `<html>` element, which is set once both fonts have loaded. The sample
+text, the glyph's waterfall and the glyphs are in elements with the IDs
+`text-box`, `waterfall` and `glyphs-box`.
 
 ## Python API
 

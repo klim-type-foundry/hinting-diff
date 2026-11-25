@@ -213,3 +213,28 @@ def test_page_text_controls(font_path, tmp_path):
     assert 'var TEXT_CHOICES = ["all", "basic", "custom"];' in page
     assert '<input type="checkbox" id="text-waterfall-toggle">' in page
     assert '<div id="text-waterfall" hidden></div>' in page
+
+
+def test_page_url_settings(font_path, tmp_path):
+    page = write_hinting_page(font_path, font_path, tmp_path).read_text()
+    # The settings that can be given in the URL, which the README lists
+    params = re.findall(r'hashParam\("(\w+)"\)', page)
+    assert params == [
+        "style",
+        "font",
+        "ppem",
+        "custom",
+        "text",
+        "waterfall",
+        "sizes",
+        "glyph",
+        "filter",
+        "capture",
+    ]
+    readme = Path(__file__).parent.parent.joinpath("README.md").read_text()
+    for param in params:
+        assert f"`{param}`" in readme
+    # Each part of the page can be screenshotted on its own, once the fonts load
+    for box_id in ("text-box", "waterfall", "glyphs-box"):
+        assert f'<div class="box" id="{box_id}"' in page
+    assert 'document.documentElement.setAttribute("data-ready", "true");' in page
