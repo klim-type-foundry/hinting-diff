@@ -73,9 +73,12 @@ jobs:
       - name: Install Python dependencies
         run: |
           uv pip install --resolution ${{ matrix.resolution }} --group dev .
+      # The system libraries come from the newest Playwright, as older ones don't
+      # know the package names of the runner's newer Ubuntu (e.g. libasound2t64)
       - name: Install Chromium for the screenshot tests
         run: |
-          playwright install --with-deps chromium
+          uvx playwright install-deps chromium
+          playwright install chromium
       - name: Run type checks
         run: |
           mypy
