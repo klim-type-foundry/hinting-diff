@@ -227,7 +227,7 @@ on:
 
 jobs:
   hinting:
-    uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.0
+    uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.1
     with:
       fonts: fonts/ttf
 ```
@@ -236,7 +236,7 @@ It compares the fonts with the same fonts in the pull request's base commit, as
 `--commit` does, uploads the pages and screenshots as an artifact named
 `hinting-screenshots`, and lists the screenshots that changed in the job's
 summary, with a link to the artifact. It installs the release of hinting-diff
-that matches the tag you give, e.g. `v0.3.0`. GitHub's Windows runners render
+that matches the tag you give, e.g. `v0.3.1`. GitHub's Windows runners render
 with ClearType at 100% display scaling, in Microsoft Edge, which is already
 installed there.
 
@@ -252,6 +252,7 @@ Its inputs, all optional but `fonts`:
 | `text` | The sample text, as `--screenshot-text` (default: `basic`) |
 | `lfs` | `true` to download [Git LFS](https://git-lfs.com) files, for fonts stored in Git LFS (default: `false`) |
 | `artifact-name` | The artifact's name (default: `hinting-screenshots`) |
+| `retention-days` | Days to keep the artifact for, e.g. `10` (default: `0`, the repository's setting, which is 90 days unless it's changed) |
 | `package` | The hinting-diff package to install, as a pip requirement (default: the release the workflow is from) |
 
 Its outputs are `artifact-url`, the artifact's URL, and `changed`, the number of
@@ -269,7 +270,7 @@ on:
 jobs:
   hinting:
     if: github.event.label.name == 'hinting screenshots'
-    uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.0
+    uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.1
     with:
       fonts: fonts/ttf
 ```

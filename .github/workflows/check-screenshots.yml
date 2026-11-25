@@ -37,6 +37,8 @@ jobs:
       fonts-before: tests/workflow-fonts/old
       fonts: tests/workflow-fonts/new
       artifact-name: check-screenshots
+      # Only needed to check the result
+      retention-days: 1
       # This checkout's package, rather than the released one
       package: '.[screenshot]'
 
