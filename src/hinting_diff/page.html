@@ -69,6 +69,11 @@ body { font-family: Helvetica; }
 }
 .glyph[aria-pressed="true"] { border: 1px solid black; }
 .glyph .missing { white-space: nowrap; }
+/* Capture mode (see applyUrlSettings()), for screenshots: only the samples, without
+   the menus, the heading or the space kept for the menus */
+.capture #nav, .capture h2, .capture #platform-warning { display: none; }
+.capture #text-sample, .capture #text-waterfall, .capture #waterfall-samples,
+.capture #glyphs { margin-right: 0; }
 </style>
 <!-- The glyphs' cell size, set from the size in ppem -->
 <style id="glyph-size-style"></style>
@@ -104,7 +109,7 @@ body { font-family: Helvetica; }
 <h2><b>Hinting</b></h2>
 <p class="warning" id="platform-warning" hidden>Browsers only apply TrueType
 hinting on Windows, so open this page on Windows to inspect it.</p>
-<div class="box">
+<div class="box" id="text-box">
 <div class="box-title" id="text-title"></div>
 <div contenteditable="true" spellcheck="false" class="box-text sample"
   id="text-sample"></div>
@@ -114,7 +119,7 @@ hinting on Windows, so open this page on Windows to inspect it.</p>
 <div class="box-title" id="waterfall-title"></div>
 <div id="waterfall-samples"></div>
 </div>
-<div class="box">
+<div class="box" id="glyphs-box">
 <div class="box-title" id="glyphs-title"></div>
 <div id="glyphs"></div>
 </div>
@@ -136,9 +141,15 @@ var textWaterfallToggle = document.getElementById("text-waterfall-toggle");
 var textWaterfallDiv = document.getElementById("text-waterfall");
 var glyphsDiv = document.getElementById("glyphs");
 var glyphSizeStyle = document.getElementById("glyph-size-style");
-var WATERFALL_SIZES = [];
-for (var size = 8; size <= 64; size++) WATERFALL_SIZES.push(size);
-var PPEM_SIZES = WATERFALL_SIZES.concat([72, 96]);
+function sizeRange(min, max) {
+  var sizes = [];
+  for (var size = min; size <= max; size++) sizes.push(size);
+  return sizes;
+}
+var PPEM_SIZES = sizeRange(8, 64).concat([72, 96]);
+// The sizes of the waterfalls, which the URL can change (see applyUrlSettings())
+var DEFAULT_WATERFALL_SIZES = sizeRange(8, 64);
+var WATERFALL_SIZES = DEFAULT_WATERFALL_SIZES;
 var DEFAULT_PPEM = 48;
 // The settings are kept for the browser tab's session, so they stay the same when
 // another font's page is opened in the same tab (e.g. in a report's frame)
@@ -154,6 +165,8 @@ var textChoice = "all";
 var editedText = null;
 // The sample text at each size, rather than at the font size
 var textWaterfall = false;
+// Only the samples, for screenshots (see applyUrlSettings())
+var capture = false;
 
 function indexWhere(items, test) {
   for (var i = 0; i < items.length; i++) {
@@ -276,9 +289,6 @@ function saveSettings() {
 }
 
 loadSettings();
-textChoiceSelect.value = textChoice;
-textWaterfallToggle.checked = textWaterfall;
-textSample.textContent = sampleText();
 
 // The value of a parameter in the URL's fragment, e.g. "style" in "#style=Bold"
 function hashParam(name) {
@@ -295,9 +305,21 @@ function hashParam(name) {
   return null;
 }
 
-// A page that shows this one in a frame can pick a variable font's instance by
-// its name (e.g. "#style=A%20Regular"), which hides this page's own menu
-function applyStyleFromUrl() {
+// The settings in the URL's fragment, e.g. "#font=new&ppem=12&glyph=a", which
+// win over the ones kept for the session, so a link shows what it describes. Only
+// the settings in the URL change, e.g. a report's frame only gives the style.
+//
+// - style: a variable font's instance, by its name, which hides the Instance menu
+// - font: "old" or "new"
+// - ppem: the font size, in pixels per em
+// - text: the sample text, "all", "basic" or "custom"
+// - custom: the custom text, which makes it the sample text
+// - waterfall: "1" for the text waterfall, "0" for the text at the font size
+// - sizes: the waterfalls' sizes, e.g. "9-24" (8-64 by default)
+// - glyph: the glyph shown in a waterfall, by its name (empty for none)
+// - filter: the glyphs' filter
+// - capture: "1" to show only the samples, for screenshots
+function applyUrlSettings() {
   var style = hashParam("style");
   var index = indexWhere(DATA.instances, function (i) {
     return i.name === style;
@@ -307,10 +329,56 @@ function applyStyleFromUrl() {
     document.getElementById("instance-item"),
     !DATA.instances.length || index >= 0
   );
+
+  var fontParam = hashParam("font");
+  if (fontParam === "old" || fontParam === "new") font = fontParam;
+  var ppem = Number(hashParam("ppem"));
+  if (PPEM_SIZES.indexOf(ppem) >= 0) ppemSelect.value = String(ppem);
+  var custom = hashParam("custom");
+  if (custom !== null) {
+    editedText = custom;
+    textChoice = "custom";
+  }
+  var text = hashParam("text");
+  if (TEXT_CHOICES.indexOf(text) >= 0) {
+    // The custom text starts as the text that's shown, as with the Text menu
+    if (text === "custom" && editedText === null) editedText = sampleText();
+    textChoice = text;
+  }
+  var waterfall = hashParam("waterfall");
+  if (waterfall === "1" || waterfall === "0") textWaterfall = waterfall === "1";
+  // Like capture, the sizes aren't kept for the session
+  var sizes = /^(\d+)-(\d+)$/.exec(hashParam("sizes") || "");
+  WATERFALL_SIZES =
+    sizes && Number(sizes[1]) >= 1 && Number(sizes[1]) <= Number(sizes[2])
+      ? sizeRange(Number(sizes[1]), Math.min(Number(sizes[2]), 200))
+      : DEFAULT_WATERFALL_SIZES;
+  var glyphParam = hashParam("glyph");
+  if (glyphParam !== null) {
+    var glyphIndex = indexWhere(DATA.glyphs, function (g) {
+      return g.name === glyphParam;
+    });
+    selectedGlyph = glyphIndex >= 0 ? DATA.glyphs[glyphIndex] : null;
+  }
+  var filter = hashParam("filter");
+  if (filter !== null) filterInput.value = filter;
+
+  capture = hashParam("capture") === "1";
+  var root = document.documentElement;
+  root.className = root.className.replace(/(^| )capture\b/g, "");
+  if (capture) root.className += " capture";
+
+  textChoiceSelect.value = textChoice;
+  textWaterfallToggle.checked = textWaterfall;
+  textSample.textContent = sampleText();
+  // Editing isn't needed in screenshots, and would show a caret
+  textSample.contentEditable = capture ? "false" : "true";
+  saveSettings();
 }
-applyStyleFromUrl();
+applyUrlSettings();
 window.addEventListener("hashchange", function () {
-  applyStyleFromUrl();
+  applyUrlSettings();
+  lastFilter = filterInput.value;
   render();
 });
 
@@ -365,15 +433,23 @@ function title(parts) {
     .join(" ");
 }
 
-var WATERFALL_RANGE =
-  WATERFALL_SIZES[0] + "–" + WATERFALL_SIZES[WATERFALL_SIZES.length - 1] + " ppem";
+function waterfallRange() {
+  return (
+    WATERFALL_SIZES[0] + "–" + WATERFALL_SIZES[WATERFALL_SIZES.length - 1] + " ppem"
+  );
+}
+
+// How to use a part of the page, left out of its title in screenshots
+function hint(text) {
+  return capture ? "" : " (" + text + ")";
+}
 
 function renderWaterfall() {
   setHidden(document.getElementById("waterfall"), !selectedGlyph);
   if (!selectedGlyph) return;
   document.getElementById("waterfall-title").textContent = title([
     selectedGlyph.name,
-    WATERFALL_RANGE
+    waterfallRange()
   ]);
   setChildren(
     document.getElementById("waterfall-samples"),
@@ -402,8 +478,8 @@ function textElements() {
 function renderText() {
   var ppem = Number(ppemSelect.value);
   document.getElementById("text-title").textContent =
-    title([textWaterfall ? WATERFALL_RANGE : ppem + " ppem"]) +
-    " (click the text to edit it)";
+    title([textWaterfall ? waterfallRange() : ppem + " ppem"]) +
+    hint("click the text to edit it");
   setHidden(textSample, textWaterfall);
   setHidden(textWaterfallDiv, !textWaterfall);
   styleSample(textSample, ppem);
@@ -422,7 +498,7 @@ function renderText() {
       label.textContent = String(size);
       var sample = document.createElement("div");
       sample.className = "box-text sample";
-      sample.contentEditable = "true";
+      sample.contentEditable = capture ? "false" : "true";
       sample.spellcheck = false;
       sample.textContent = text;
       styleSample(sample, size);
@@ -466,7 +542,7 @@ function renderGlyphs() {
   var ppem = Number(ppemSelect.value);
   var filter = filterInput.value.replace(/^\s+|\s+$/g, "").toLowerCase();
   document.getElementById("glyphs-title").textContent =
-    title([ppem + " ppem"]) + " (click a glyph for a waterfall, hover for its name)";
+    title([ppem + " ppem"]) + hint("click a glyph for a waterfall, hover for its name");
   setGlyphCellSize(ppem);
   setChildren(
     glyphsDiv,
@@ -558,6 +634,24 @@ textWaterfallToggle.addEventListener("click", function () {
 // The pixel ratio changes with the browser's zoom, which resizes the window
 window.addEventListener("resize", render);
 render();
+
+// For tools that take screenshots of the page: `data-ready` is set on the <html>
+// element once both fonts have loaded. Browsers without the CSS Font Loading API
+// set it when the page has loaded.
+function setReady() {
+  document.documentElement.setAttribute("data-ready", "true");
+}
+if (document.fonts && document.fonts.load) {
+  // One after the other, without Promise.all(), which old browsers lack
+  document.fonts
+    .load('16px "hinting-old"')
+    .then(function () {
+      return document.fonts.load('16px "hinting-new"');
+    })
+    .then(setReady, setReady);
+} else {
+  window.addEventListener("load", setReady);
+}
 </script>
 </body>
 </html>
