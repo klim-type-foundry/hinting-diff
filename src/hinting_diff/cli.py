@@ -1,17 +1,51 @@
 import argparse
+import re
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from hinting_diff import __version__
 from hinting_diff.git import save_fonts_at_commit
 from hinting_diff.matching import match_fonts
 from hinting_diff.page import write_hinting_page, write_index_page
+from hinting_diff.screenshot import (
+    DEFAULT_PPEMS,
+    DEFAULT_SIZES,
+    DEFAULT_TEXT,
+    open_browser,
+    take_screenshots,
+    write_screenshot_list,
+)
 
 _USAGE = """
-  %(prog)s [-h] [-o OUT] [--version] BEFORE AFTER
-  %(prog)s [-h] [-o OUT] [--version] -fb FONT [FONT ...] -fa FONT [FONT ...]
-  %(prog)s [-h] [-o OUT] [--version] AFTER [AFTER ...] --commit [REF]"""
+  %(prog)s [-h] [-o OUT] [--screenshot ...] [--version] BEFORE AFTER
+  %(prog)s [-h] [-o OUT] [--screenshot ...] [--version] -fb FONT [FONT ...] -fa FONT [FONT ...]
+  %(prog)s [-h] [-o OUT] [--screenshot ...] [--version] AFTER [AFTER ...] --commit [REF]"""
+
+
+@dataclass(frozen=True)
+class _ScreenshotOptions:
+    sizes: tuple[int, int]
+    ppems: list[int]
+    text: str
+
+
+def _size_range(value: str) -> tuple[int, int]:
+    # e.g. "9-24"
+    match = re.fullmatch(r"(\d+)-(\d+)", value)
+    if not match or not 1 <= int(match[1]) <= int(match[2]) <= 200:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} isn't a range of sizes from 1 to 200 ppem, e.g. 9-24"
+        )
+    return int(match[1]), int(match[2])
+
+
+def _ppem(value: str) -> int:
+    # The page's font sizes
+    if not value.isdigit() or not (8 <= int(value) <= 64 or int(value) in (72, 96)):
+        raise argparse.ArgumentTypeError(f"{value!r} isn't 8-64, 72 or 96 ppem")
+    return int(value)
 
 
 def _warn(message: str) -> None:
@@ -28,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
             "-fb and -fa: fonts are matched by their file names. Or give the new "
             "fonts, or folders of them, in a git repository, with --commit to compare "
             "them with the fonts at the same paths in a commit. Browsers only apply "
-            "TrueType hinting on Windows, so open the pages on Windows."
+            "TrueType hinting on Windows, so open the pages on Windows, or take "
+            "screenshots of them there with --screenshot."
         ),
     )
     parser.add_argument(
@@ -75,8 +110,50 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("hinting-diff"),
         help="folder for the pages and copies of the fonts (default: hinting-diff)",
     )
+    screenshot_group = parser.add_argument_group(
+        "screenshots",
+        "Take screenshots of each page in the old and the new font, in OUT/screenshots, "
+        "with a screenshots.json file that lists them and whether they changed. Needs "
+        'the "screenshot" extra, and only shows the hinting on Windows.',
+    )
+    screenshot_group.add_argument(
+        "--screenshot",
+        action="store_true",
+        help="take screenshots of the pages",
+    )
+    screenshot_group.add_argument(
+        "--screenshot-sizes",
+        type=_size_range,
+        default=DEFAULT_SIZES,
+        metavar="MIN-MAX",
+        help="sizes of the sample text's waterfall, in ppem "
+        f"(default: {DEFAULT_SIZES[0]}-{DEFAULT_SIZES[1]})",
+    )
+    screenshot_group.add_argument(
+        "--screenshot-ppem",
+        nargs="+",
+        type=_ppem,
+        default=list(DEFAULT_PPEMS),
+        metavar="PPEM",
+        help="sizes of the glyphs, in ppem "
+        f"(default: {' '.join(map(str, DEFAULT_PPEMS))})",
+    )
+    screenshot_group.add_argument(
+        "--screenshot-text",
+        default=DEFAULT_TEXT,
+        metavar="TEXT",
+        help='the sample text: "all" (every character the new font encodes), '
+        f'"basic" (Basic Latin) or your own text (default: {DEFAULT_TEXT})',
+    )
     parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args(argv)
+    screenshot_options = (
+        _ScreenshotOptions(
+            args.screenshot_sizes, args.screenshot_ppem, args.screenshot_text
+        )
+        if args.screenshot
+        else None
+    )
 
     if args.commit is not None:
         if args.fonts_before:
@@ -98,7 +175,12 @@ def main(argv: list[str] | None = None) -> int:
             except (FileNotFoundError, ValueError) as error:
                 parser.error(str(error))
             return _write_pages(
-                parser, before_paths, after_paths, args.output, args.commit
+                parser,
+                before_paths,
+                after_paths,
+                args.output,
+                args.commit,
+                screenshot_options,
             )
     if args.paths:
         if args.fonts_before or args.fonts_after:
@@ -113,7 +195,9 @@ def main(argv: list[str] | None = None) -> int:
         before_paths, after_paths = args.fonts_before, args.fonts_after
     else:
         parser.error("the old and the new fonts are needed")
-    return _write_pages(parser, before_paths, after_paths, args.output)
+    return _write_pages(
+        parser, before_paths, after_paths, args.output, None, screenshot_options
+    )
 
 
 def _write_pages(
@@ -122,10 +206,12 @@ def _write_pages(
     after_paths: list[Path],
     output_path: Path,
     commit: str | None = None,
+    screenshot_options: _ScreenshotOptions | None = None,
 ) -> int:
     """
     Writes a page for each old and new font with the same name, and an index page
-    if there are several. Returns the command's exit code.
+    if there are several, and takes screenshots of them with `screenshot_options`.
+    Returns the command's exit code.
     """
     try:
         font_match = match_fonts(before_paths, after_paths)
@@ -157,7 +243,49 @@ def _write_pages(
             print(page_paths[-1])
     if len(page_paths) > 1:
         print(write_index_page(page_paths, output_path))
-    return 0 if len(page_paths) == len(font_match.pairs) else 1
+    ok = len(page_paths) == len(font_match.pairs)
+    if screenshot_options is not None and page_paths:
+        ok = _take_screenshots(page_paths, output_path, screenshot_options) and ok
+    return 0 if ok else 1
+
+
+def _take_screenshots(
+    page_paths: list[Path], output_path: Path, options: _ScreenshotOptions
+) -> bool:
+    """
+    Takes screenshots of the pages, prints the paths of the new font's ones that
+    changed, and the list of screenshots. Returns whether it worked.
+    """
+    if sys.platform != "win32":
+        _warn(
+            "browsers only apply TrueType hinting on Windows, so the screenshots "
+            "don't show it"
+        )
+    screenshots_path = output_path / "screenshots"
+    screenshots = []
+    try:
+        with open_browser() as browser:
+            for page_path in page_paths:
+                screenshots += take_screenshots(
+                    page_path,
+                    screenshots_path,
+                    browser,
+                    sizes=options.sizes,
+                    ppems=options.ppems,
+                    text=options.text,
+                )
+    except (ImportError, RuntimeError) as error:
+        print(f"hinting-diff: error: {error}", file=sys.stderr)
+        return False
+    changed = [screenshot for screenshot in screenshots if screenshot.changed]
+    for screenshot in changed:
+        print(screenshot.new)
+    print(write_screenshot_list(screenshots, screenshots_path))
+    print(
+        f"{len(changed)} of {len(screenshots)} screenshots changed",
+        file=sys.stderr,
+    )
+    return True
 
 
 if __name__ == "__main__":  # pragma: no cover

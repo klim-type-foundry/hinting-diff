@@ -35,7 +35,8 @@ make init
 ```
 
 This sets up the Python environment in `.venv/` with the exact package versions
-from `uv.lock`, and installs the [pre-commit](https://pre-commit.com/) hooks.
+from `uv.lock`, installs Playwright's Chromium for the screenshot tests, and
+installs the [pre-commit](https://pre-commit.com/) hooks.
 
 ### Checks
 

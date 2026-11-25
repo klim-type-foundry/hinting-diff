@@ -35,6 +35,10 @@ classifiers = [
 # ranges wide. Exact versions for development are pinned in uv.lock
 dependencies = ["fonttools>=4.40,<5"]
 
+[project.optional-dependencies]
+# For --screenshot and the screenshot functions
+screenshot = ["playwright>=1.40,<2", "pillow>=10.3,<14"]
+
 [project.urls]
 Source = "https://github.com/klim-type-foundry/hinting-diff"
 Issues = "https://github.com/klim-type-foundry/hinting-diff/issues"
@@ -48,6 +52,9 @@ hinting-diff = "hinting_diff.cli:main"
 [dependency-groups]
 dev = [
     "mypy>=2,<3",
+    # The screenshot extra's dependencies, for the tests
+    "pillow>=10.3,<14",
+    "playwright>=1.40,<2",
     "pre-commit>=4,<5",
     "pytest>=9,<10",
     "pytest-cov>=7,<8",

@@ -32,6 +32,9 @@ jobs:
       - name: Install Python dependencies
         run: |
           uv sync --locked --active
+      - name: Install Chromium for the screenshot tests
+        run: |
+          playwright install --with-deps chromium
       - name: Run type checks
         run: |
           mypy
@@ -70,6 +73,9 @@ jobs:
       - name: Install Python dependencies
         run: |
           uv pip install --resolution ${{ matrix.resolution }} --group dev .
+      - name: Install Chromium for the screenshot tests
+        run: |
+          playwright install --with-deps chromium
       - name: Run type checks
         run: |
           mypy
