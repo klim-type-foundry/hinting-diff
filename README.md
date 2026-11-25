@@ -215,6 +215,65 @@ that changed:
 The command prints the paths of the new font's screenshots that changed, then the
 list's path.
 
+### Screenshots in GitHub Actions
+
+hinting-diff has a [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows)
+that takes the screenshots on a Windows runner, so you can review hinting from
+any computer, e.g. on a pull request:
+
+```yaml
+on:
+  pull_request:
+
+jobs:
+  hinting:
+    uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.0
+    with:
+      fonts: fonts/ttf
+```
+
+It compares the fonts with the same fonts in the pull request's base commit, as
+`--commit` does, uploads the pages and screenshots as an artifact named
+`hinting-screenshots`, and lists the screenshots that changed in the job's
+summary, with a link to the artifact. It installs the release of hinting-diff
+that matches the tag you give, e.g. `v0.3.0`. GitHub's Windows runners render
+with ClearType at 100% display scaling, in Microsoft Edge, which is already
+installed there.
+
+Its inputs, all optional but `fonts`:
+
+| Input | Value |
+|---|---|
+| `fonts` | The new fonts, or folders of them, separated by spaces, e.g. `fonts/ttf fonts/VF` |
+| `fonts-before` | The old fonts, or folders of them, separated by spaces, to compare with rather than the fonts in a commit, e.g. fonts you've downloaded from your last release |
+| `commit` | The commit to compare with, e.g. a tag. By default, the pull request's base commit: outside of a pull request, give `commit` or `fonts-before`. |
+| `sizes` | Sizes of the sample text's waterfall, as `--screenshot-sizes` (default: `9-24`) |
+| `ppem` | Sizes of the glyphs, separated by spaces, as `--screenshot-ppem` (default: `16`) |
+| `text` | The sample text, as `--screenshot-text` (default: `basic`) |
+| `lfs` | `true` to download [Git LFS](https://git-lfs.com) files, for fonts stored in Git LFS (default: `false`) |
+| `artifact-name` | The artifact's name (default: `hinting-screenshots`) |
+| `package` | The hinting-diff package to install, as a pip requirement (default: the release the workflow is from) |
+
+Its outputs are `artifact-url`, the artifact's URL, and `changed`, the number of
+screenshots that changed, e.g. for a later job to comment on the pull request.
+The paths can't contain spaces. It only needs to read the repository
+(`contents: read`), and Windows runners use twice as many of a private
+repository's Actions minutes as Linux runners, so you may prefer to run it on
+demand, e.g. when a label is added to a pull request:
+
+```yaml
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  hinting:
+    if: github.event.label.name == 'hinting screenshots'
+    uses: klim-type-foundry/hinting-diff/.github/workflows/screenshots.yml@v0.3.0
+    with:
+      fonts: fonts/ttf
+```
+
 ### Settings in the URL
 
 The page's settings can be given in its URL, after a `#`, e.g.
