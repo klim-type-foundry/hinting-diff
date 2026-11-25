@@ -32,6 +32,14 @@ pip install hinting-diff
 It needs Python 3.10 or later, and installs
 [fontTools](https://github.com/fonttools/fonttools) too.
 
+To take screenshots of the pages (see [Screenshots](#screenshots)), install the
+`screenshot` extra, which adds [Playwright](https://playwright.dev/python/) and
+[Pillow](https://python-pillow.org):
+
+```shell
+pip install "hinting-diff[screenshot]"
+```
+
 ## Usage
 
 ```shell
@@ -64,16 +72,16 @@ options:
 
 ```text
 usage: 
-  hinting-diff [-h] [-o OUT] [--version] BEFORE AFTER
-  hinting-diff [-h] [-o OUT] [--version] -fb FONT [FONT ...] -fa FONT [FONT ...]
-  hinting-diff [-h] [-o OUT] [--version] AFTER [AFTER ...] --commit [REF]
+  hinting-diff [-h] [-o OUT] [--screenshot ...] [--version] BEFORE AFTER
+  hinting-diff [-h] [-o OUT] [--screenshot ...] [--version] -fb FONT [FONT ...] -fa FONT [FONT ...]
+  hinting-diff [-h] [-o OUT] [--screenshot ...] [--version] AFTER [AFTER ...] --commit [REF]
 
 Write pages to compare the TrueType hinting of two versions of fonts. Give the
 old and new font, or folders of them, or several fonts with -fb and -fa: fonts
 are matched by their file names. Or give the new fonts, or folders of them, in
 a git repository, with --commit to compare them with the fonts at the same
 paths in a commit. Browsers only apply TrueType hinting on Windows, so open
-the pages on Windows.
+the pages on Windows, or take screenshots of them there with --screenshot.
 
 positional arguments:
   BEFORE AFTER          the old and the new font (TTF), or folders of fonts.
@@ -92,6 +100,23 @@ options:
                         folder for the pages and copies of the fonts (default:
                         hinting-diff)
   --version             show program's version number and exit
+
+screenshots:
+  Take screenshots of each page in the old and the new font, in
+  OUT/screenshots, with a screenshots.json file that lists them and whether
+  they changed. Needs the "screenshot" extra, and only shows the hinting on
+  Windows.
+
+  --screenshot          take screenshots of the pages
+  --screenshot-sizes MIN-MAX
+                        sizes of the sample text's waterfall, in ppem
+                        (default: 9-24)
+  --screenshot-ppem PPEM [PPEM ...]
+                        sizes of the glyphs, in ppem (default: 16)
+  --screenshot-text TEXT
+                        the sample text: "all" (every character the new font
+                        encodes), "basic" (Basic Latin) or your own text
+                        (default: basic)
 ```
 
 The page has:
@@ -139,6 +164,56 @@ isn't now, is skipped, with a warning. The old fonts are read from the local
 repository, so `git` needs to be installed, and the commit needs to be there,
 e.g. `git fetch` first for `origin/main`. Fonts in
 [Git LFS](https://git-lfs.com) work too, if `git lfs` is installed.
+
+### Screenshots
+
+Add `--screenshot` to also take screenshots of each page, in the old and the new
+font, e.g. to review hinting in CI, or to see it on a Windows computer without
+opening each page:
+
+```shell
+hinting-diff old/ new/ --screenshot
+```
+
+Browsers only apply TrueType hinting on Windows, so take them on Windows: on
+other platforms, the command warns that the screenshots don't show the hinting.
+They're taken in Microsoft Edge on Windows, where it's always installed, or in
+[Playwright's Chromium](https://playwright.dev/python/docs/browsers) elsewhere,
+installed with `playwright install chromium`. On Windows, they render with
+ClearType, as Windows does by default, and they're taken at 100% display
+scaling, so a pixel in a screenshot is a pixel of the font.
+
+For each font, the screenshots are, in the old and the new font:
+
+- The sample text as a waterfall from 9 to 24 ppem, e.g.
+  `Family-Regular-text-new.png`. Change the sizes with `--screenshot-sizes`,
+  e.g. `--screenshot-sizes 8-32`, and the text with `--screenshot-text`: `all`
+  (every character the new font encodes), `basic` (Basic Latin, the default) or
+  your own text.
+- The glyphs at 16 ppem, e.g. `Family-Regular-glyphs-16ppem-new.png`. Give other
+  sizes, or several, with `--screenshot-ppem`, e.g. `--screenshot-ppem 12 16`.
+
+For a variable font, they're taken at each named instance, e.g.
+`Family-VF-Bold-text-new.png`. They're saved in a `screenshots` folder in the
+output folder, with a `screenshots.json` file that lists them and whether the old
+and new screenshots differ (`changed`), e.g. for a CI workflow to show the ones
+that changed:
+
+```json
+[
+  {
+    "page": "Family-Regular-hinting.html",
+    "style": null,
+    "part": "text",
+    "old": "Family-Regular-text-old.png",
+    "new": "Family-Regular-text-new.png",
+    "changed": true
+  }
+]
+```
+
+The command prints the paths of the new font's screenshots that changed, then the
+list's path.
 
 ### Settings in the URL
 
@@ -304,6 +379,46 @@ with TTFont("new/Family-Regular.ttf", lazy=True) as font:
     for name, coordinates in get_named_instances(font):
         print(name, coordinates)
 ```
+
+### Taking screenshots
+
+With the `screenshot` extra, `open_browser()` starts a browser, and
+`take_screenshots()` takes screenshots of a page in it, as `--screenshot` does:
+
+```python
+from pathlib import Path
+
+from hinting_diff import open_browser, take_screenshots, write_screenshot_list
+
+output_path = Path("hinting-diff/screenshots")
+with open_browser() as browser:
+    screenshots = take_screenshots(
+        Path("hinting-diff/Family-Regular-hinting.html"), output_path, browser
+    )
+for screenshot in screenshots:
+    if screenshot.changed:
+        print(screenshot.new)  # e.g. hinting-diff/screenshots/Family-Regular-text-new.png
+write_screenshot_list(screenshots, output_path)
+```
+
+- `open_browser()` is a context manager that starts a headless browser, Microsoft
+  Edge on Windows or Playwright's Chromium, and closes it afterwards. It raises an
+  `ImportError` without the `screenshot` extra, and a `RuntimeError` if no browser
+  can be started.
+- `take_screenshots(page_path, output_path, browser, sizes=(9, 24), ppems=(16,),
+  text="basic")` saves the screenshots of a page in `output_path`, which is made
+  if it doesn't exist yet, and returns them as a list of `Screenshot`s, with:
+  - `page`: the page's path.
+  - `style`: the variable font's named instance, or `None` for a static font.
+  - `part`: `text`, or `glyphs-<size>ppem`, e.g. `glyphs-16ppem`.
+  - `old` and `new`: the paths of the old and new font's screenshots.
+  - `changed`: whether they differ.
+
+  `sizes` is the smallest and largest size of the text's waterfall, `ppems` the
+  sizes of the glyphs, and `text` the sample text, as with the command's options.
+- `write_screenshot_list(screenshots, output_path, file_name="screenshots.json")`
+  writes the list of screenshots (see [Screenshots](#screenshots)) and returns
+  its path. Its paths are relative to `output_path`.
 
 `hinting_diff.__version__` is the package's version.
 

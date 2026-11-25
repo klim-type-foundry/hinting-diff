@@ -21,6 +21,8 @@ init:
 	@# The exact versions from uv.lock, including this package (editable) and the
 	@# development tools
 	uv sync --locked
+	@# Playwright's Chromium, for the screenshot tests
+	$(VENV_EXEC) playwright install chromium
 	$(VENV_EXEC) pre-commit install
 
 # Update a single Python package in uv.lock, and install it, e.g.
