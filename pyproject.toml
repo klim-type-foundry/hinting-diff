@@ -14,7 +14,7 @@ authors = [{ name = "Klim Type Foundry" }]
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE.txt"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["fonts", "truetype", "hinting", "diff"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -23,7 +23,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
