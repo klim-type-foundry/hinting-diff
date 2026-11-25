@@ -29,7 +29,7 @@ Firefox 52, for checking hinting on old versions of Windows.
 pip install hinting-diff
 ```
 
-It needs Python 3.10 or later, and installs
+It needs Python 3.11 or later, and installs
 [fontTools](https://github.com/fonttools/fonttools) too.
 
 To take screenshots of the pages (see [Screenshots](#screenshots)), install the
